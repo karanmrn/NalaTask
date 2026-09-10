@@ -29,7 +29,7 @@ Directed to: import the draft into a fresh git repo, get `dbt parse` and then `d
 
 Things it found that I would have missed: `try_parse_json` and `array_contains` have no DuckDB equivalent, so the adapter-dispatch macros exist; the seed loader raced the staging models because sources have no dependency on seeds (`make build` seeds first); `row_number` got renamed to `row_decimal` by my own global replace (caught by the build, fixed in a minute).
 
-Things I overruled: it wanted a Snowflake trial account to prove the build. The brief says the project need not run; DuckDB plus `dbt parse --target prod` covers the parse and execution risk without a second environment. It wanted to keep the GPT walkthrough guide in the submission; that is interview prep, not a deliverable.
+Things I overruled: it proposed a Snowflake trial account to prove the build. The brief says the project need not run, and I had used DuckDB plus uv for the same purpose on a previous project, so I chose that: `dbt build` locally plus `dbt parse --target prod` covers the parse and execution risk without a second environment. I also dropped the 14-page interview walkthrough GPT had produced from the submission; that is preparation, not a deliverable.
 
 ## What I did myself
 

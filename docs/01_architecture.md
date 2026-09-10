@@ -74,7 +74,7 @@ Cost controls: incremental merge on the three large facts, `cluster_by` date on 
 | Layer | Minimum | Examples |
 |-------|---------|----------|
 | Source | `not_null` on keys, freshness on connector timestamps, JSON parseability | `json_payloads_parse` |
-| Staging | `unique` + `not_null` on keys, `accepted_values` on every enum, `relationships` on foreign keys | 17 state and type enums |
+| Staging | `unique` + `not_null` on keys, `accepted_values` on every enum, `relationships` on foreign keys | 22 `accepted_values` tests on state and type enums |
 | Intermediate | grain uniqueness, no future or wrong-scope candidates | `no_future_workflow_candidate` |
 | Production marts | all of the above plus reconciliation to the fact (`finance_count_reconciliation`, `reviews_reconcile`, `fincrime_tasks_reconcile`), denominator bounds, latency band sums, FX coverage, no partial USD totals, unit tests on the denominator rules | 4 dbt unit tests, 23 singular tests |
 | Exploratory | grain uniqueness, ordering, monotonic funnel, missing KYC signal; severity `warn` | `kyc_final_signal_missing` |

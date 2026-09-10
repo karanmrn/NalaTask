@@ -278,8 +278,8 @@ metrics:
     measure: qualified_transactions_measure
 - name: transaction_success_rate
   label: Transaction Success Rate
-  description: REQUIRED. Completed/all qualifying transactions, aggregated counts rather than averaged rates. Creation-cohort
-    date, current-state outcomes.
+  description: Completed qualifying transactions divided by all qualifying transactions, summed then divided. Creation-day
+    cohort, current state; recent cohorts restate as transactions settle.
   type: ratio
   type_params:
     numerator: completed_qualifying_transactions
@@ -298,7 +298,8 @@ metrics:
     measure: attempt_count_measure
 - name: disbursement_provider_success_rate
   label: Disbursement Provider Success Rate
-  description: REQUIRED. Completed/all attempts by attempt provider and creation day.
+  description: Completed attempts divided by all attempts (pending, failed, reversed included), by the attempt's own provider
+    and attempt creation day.
   type: ratio
   type_params:
     numerator: completed_disbursement_attempts
@@ -317,15 +318,15 @@ metrics:
     measure: formal_review_count_measure
 - name: fincrime_false_positive_rate
   label: Fincrime False Positive Rate
-  description: 'REQUIRED per brief: FALSE_POSITIVE reviews divided by all formal reviews. Not FP/(FP+TN); not a
-    classifier population false-positive rate.'
+  description: FALSE_POSITIVE formal reviews divided by all formal reviews, INCONCLUSIVE and repeat reviews included, on
+    review date. Not FP/(FP+TN); the source has no true negatives.
   type: ratio
   type_params:
     numerator: false_positive_reviews
     denominator: all_formal_reviews
 - name: signup_to_first_transaction_hours
   label: Signup To First Transaction Hours
-  description: REQUIRED EXPLORATORY. Mean hours from observed signup completion to first observed subsequent Amplitude
+  description: Exploratory. Mean hours from observed signup completion to first observed subsequent Amplitude
     transaction completion for resolved users. Slice by signup_country and signup_completed_at day.
   type: simple
   type_params:

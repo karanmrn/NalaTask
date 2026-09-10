@@ -1,8 +1,8 @@
 version: 2
 seeds:
 - name: transaction_type_policy
-  description: Explicit five-type outbound policy; review outgoing P2P scope with Finance. No new recipient_id-not-null
-    restriction.
+  description: Which transaction types count as outbound money movement to a recipient. Five types qualify. Outgoing P2P
+    is included pending Finance sign-off. Change this seed, never a SQL list.
   config:
     column_types:
       transaction_type: varchar
