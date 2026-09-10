@@ -1,69 +1,105 @@
-# NALA - Architecture
+# Architecture
 
-## Architecture and modelling
+NALA Senior Analytics Engineer assessment. Karan Manoharan, September 2026.
 
-**Objective.** Deliver a governed transformation layer for the four production requirements, plus an isolated onboarding proof of concept. The supplied schemas are the source of truth. SQL, assumptions and local verification are included; no live platform deployment is claimed.
+The project transforms three sources (payments backend and fincrime service via StreamServe CDC, Amplitude via Fivetran)
+into a governed layer for four production requirements and one exploratory funnel. It runs unchanged on DuckDB (local,
+synthetic data) and Snowflake (production). Everything described here has been executed locally: 37 models, 1 snapshot,
+158 data tests, 4 unit tests, semantic layer validated against the warehouse, five metrics queried.
 
-![Design diagram](diagrams/architecture_compact.png)
+![Architecture](architecture.svg)
 
-### Layers and materialisations
+## 1. Layering and materializations
 
-RAW.PAYMENTS and RAW.FINCRIME are assumed current-row StreamServe replicas; RAW.AMPLITUDE is the daily Fivetran landing. Names are configurable. Fifteen staging views preserve the supplied shape, cast types and expose malformed JSON rather than masking it. Four intermediate views classify transactions and resolve entity context. Nine persisted, contracted production marts separate transaction, attempt, execution, formal-review and task grains. Daily aggregates never average already-aggregated rates.
+| Layer | Models | Materialization | Why |
+|-------|--------|-----------------|-----|
+| Staging (`stg_`) | 16, one per source table | view | Rename, cast, collapse the CDC log. No business logic, so no storage. |
+| Intermediate (`int_`) | 4 | view | Reusable logic (type policy, workflow context, task candidates). Only consumed by marts. |
+| Snapshot | `snap_transaction_state` | snapshot (type 2) | Source keeps only the current row; this records state transitions. |
+| Marts, facts (`fct_`) | 5 | incremental merge (transactions, attempts, rule executions); table (reviews, tasks) | Large tables get merge with a 3-day `updated_at` lookback. Small ones rebuild. |
+| Marts, aggregates (`agg_`) | 5 | table | Cheap to rebuild from facts; one row per day and dimension for Hex. |
+| Marts, dimensions (`dim_`) | 3 | table | Users, rule versions, providers. |
+| Exploratory | 3 | table for the 90-day event subset, views on top | Cost bound on the 100M-row source; nothing downstream depends on it. |
 
-The exploratory branch materialises a bounded 90-day event subset and keeps its two downstream models as views. It has separate selection, freshness expectations and promotion gates. It cannot block production. A daily spine supports semantic time queries.
+Production and exploratory differ in three places: the `production` selector never includes the Amplitude branch; exploratory tests are `warn`, production tests are `error`; contracts are enforced only on `marts/`. A failing exploratory model cannot block a finance number.
 
-### CDC and performance
+Grains are explicit and never mixed: transaction, disbursement attempt, rule execution, formal review, task, onboarding entity.
+Facts carry pre-aggregated 0/1 counters (`completed_attempt_count`, `false_positive_count`) so ratios are always sums divided by sums, never averages of rates.
 
-No connector offset, ingestion timestamp or deletion flag is specified. Duplicate source keys fail tests; the implementation does not invent a deduplication order. Baseline fact rebuilds favour correctness for mutable replicas and changing enrichments. This is not a claim that hourly full rebuilds meet cost targets at 30M rows. Profile representative scans, joins, spill and runtime before enabling the proposed cadence.
+## 2. CDC handling (StreamServe)
 
-An optional attempt MERGE uses last_updated_at with a three-day overlap and the complete key, and is disabled by default. Enable only after proving late-arrival, update and hard-delete contracts; retain reconciliation and replay. Other large facts need a trustworthy changed-key feed before high-frequency operation. Avoid blind UUID clustering, production-wide full refresh and concurrency increases without measurements.
+Assumption: StreamServe lands an append-only change log with `_cdc_operation`, `_cdc_lsn`, `_cdc_loaded_at`. Every staging model calls `cdc_current_rows()`:
+keep the row with the highest LSN per primary key, drop keys whose latest operation is `DELETE`. If the connector is configured to merge into a current-state table instead, `cdc_landing_mode: current_state` turns the macro into a pass-through. One variable, no model changes.
 
-Source: supplied assessment, Data Platform Context, Business Requirements and Deliverables. Additional reference data, time conventions and attribution rules below are explicit candidate assumptions.
+Consequences downstream:
 
+- Source tests check `not_null` only; uniqueness is asserted on staging, where it is true.
+- Incremental facts filter on `updated_at`, never `created_at`. An attempt created two months ago that changes state today falls inside the lookback and is merged.
+- Hard deletes disappear from staging; the snapshot keeps their last known state.
+- `completed_at` on transactions comes from the snapshot's first `COMPLETED` transition, falling back to `updated_at` when the current state is `COMPLETED` (updated_at is the last state change by definition).
+- Freshness is measured on `_cdc_loaded_at` (warn 15 min, error 2 h) and `_fivetran_synced` (warn 26 h, error 30 h). Business timestamps are never used as freshness.
 
----
+## 3. Cross-source enrichment
 
-## Business meaning and joins
+Requirement 4 joins fincrime workflow executions (Source 2) to backend tasks (Source 1). There is no foreign key. `tasks_task.associated_ids` is positional and only documented as "typically". The join is therefore a candidate match, not a lookup:
 
-### Finance: one row per transaction
+1. `int_fincrime_task_context` parses the typed positions (`transaction_review`: [0] transaction, [2] user; `user_review`: [0] user) and the `content.disbursement_id` anchor. Contradictory IDs are flagged.
+2. `int_workflow_context` extracts `user_id`/`transaction_id` from the execution JSON and whether the actions include `CREATE_TASK`, `BLOCK_USER` or `HOLD_TRANSACTION`.
+3. `int_task_workflow_candidates` matches on the same entity and a task-producing action inside the 60 minutes before the task was created.
+4. `fct_fincrime_tasks` labels each task `UNIQUE_INFERRED`, `AMBIGUOUS`, `UNMATCHED`, `UNSUPPORTED_CONTEXT` or `CONFLICTING_CONTEXT`. All tasks stay in the count. Outcome-versus-result correlation is reported with linkage coverage beside it.
 
-Qualify the three types containing DISBURSEMENT plus OUTGOING_PEER_TO_PEER and CONVERSION_OUTGOING_PEER_TO_PEER. The P2P interpretation requires Finance approval. Exclude incoming, collection-only, conversion-only, rewards and reversals. Completed means current state COMPLETED. Dates are UTC creation-day cohorts, not completion-day accounting: no completed_at is supplied, and historical cohorts can restate.
+Challenges met: IDs live inside JSON on both sides (typed in staging, parsed once in intermediate); the two CDC streams have independent lag, so a task can land before its execution (the window tolerates it, the freshness gate catches large lag); positional arrays are a contract that can drift (a test fails on unsupported task types instead of guessing).
 
-Local volume is meaningful only within a sending currency. USD requires a new approved daily (rate_date, currency, usd_per_unit) reference, with unique keys, positive rates and provenance. The supplied exchange_rate is sent-to-received currency, not a USD rate. USD-to-USD is 1. Missing coverage leaves amounts NULL, makes the entire affected daily USD total NULL and fails a release test; no invented or partial total is published.
+The fix is upstream: emit `workflow_execution_id` when the task is created. The model is built so that column replaces the heuristic in one join.
 
-### Payouts and formal reviews: preserve the denominator
+Amplitude joins to the backend through `user_id`. Anonymous events on a device seen with exactly one user are stitched for the POC; shared devices stay unresolved.
 
-Provider success counts completed attempts divided by all attempts, using each attempt's own provider. Pending, ambiguous, failed and reversed attempts remain in the denominator. Completion/failure durations use last_updated_at minus created_at for relevant current terminal states, explicitly named proxies. Negative durations fail a test. Bands are non-overlapping; exactly 24 hours is in 1-24 hours, greater values in over 24 hours.
+## 4. Orchestration
 
-Rule executions join exact rule-version IDs, including retired definitions. FAIL is an explicit trigger proxy, not confirmed fraud. Formal false positives divide FALSE_POSITIVE review records by all formal review records, including repeats and INCONCLUSIVE, as required. Reviews use review-day; executions use execution-day. The daily activity mart displays both clocks without implying a same-day causal cohort.
+Scheduler: dbt Cloud jobs. The brief assumes dbt Cloud access, the sources are already managed by StreamServe and Fivetran, and there is no cross-tool dependency that needs an external orchestrator yet. If Fivetran and dbt need a shared DAG later, the project is already asset-shaped for Dagster.
 
-### Cross-source task attribution and onboarding
+| Job | Selector | Cadence | Trigger | Notes |
+|-----|----------|---------|---------|-------|
+| `ops_hourly` | `tag:ops tag:fincrime tag:tasks` + parents | hourly | schedule, skipped if the previous run is still going | incremental facts, 3-day lookback; snapshot first |
+| `finance_daily` | `tag:finance` + parents | daily 01:00 UTC | schedule, after the FX rate for the previous day has landed (`source freshness` gate on `reference_data`) | full rebuild of finance aggregates; reconciliation tests block publication |
+| `growth_daily` | `selector:exploratory` | daily | Fivetran sync-complete webhook, not a fixed 06:00 | 90-day window; failures warn only |
+| `full_refresh` | everything | on demand | manual | after a policy seed change or a backfill |
 
-Tasks have no workflow_execution_id. Parse only recognised task-type positions and disbursement anchors; detect contradictory IDs. Match compatible entity scope and task-producing actions within the preceding 60 minutes. Zero, multiple, unsupported and conflicting matches remain visible and counted. A single candidate is UNIQUE_INFERRED, not proof of causation. Correlations must show linkage coverage; production-grade causal reporting needs an emitted execution key. Resolution duration is an updated-at proxy.
+Dev to prod: feature branch, PR opens a dbt Cloud CI job that builds `state:modified+` into `PR_<n>` schema deferring unchanged models to the production manifest, runs tests, and tears the schema down on merge. GitHub Actions runs the same project on DuckDB (`make build`, `mf validate-configs`, `sqlfluff`, `dbt parse --target prod`) so a broken model never reaches the warehouse CI. Merge to `main` deploys; production jobs read `main`.
 
-Amplitude identity uses explicit user IDs first; anonymous events on a device with one observed user may be inferred for the POC, while shared-device events remain unresolved. Whole-KYC completion is not supplied: is_final_step=true is a proposed event-property contract, not a source fact. Missing final signals warn and leave strict KYC unknown. Ordered funnel conversions are separate from the required signup-to-first-transaction duration, which does not depend on observing KYC. First means first observed in the window, not lifetime first. Incomplete cohorts and clock skew remain caveats.
+Cost controls: incremental merge on the three large facts, `cluster_by` date on Snowflake, exploratory subset materialized once per day, query tags per job, `store_failures` off.
 
+## 5. Testing strategy
 
----
+| Layer | Minimum | Examples |
+|-------|---------|----------|
+| Source | `not_null` on keys, freshness on connector timestamps, JSON parseability | `json_payloads_parse` |
+| Staging | `unique` + `not_null` on keys, `accepted_values` on every enum, `relationships` on foreign keys | 17 state and type enums |
+| Intermediate | grain uniqueness, no future or wrong-scope candidates | `no_future_workflow_candidate` |
+| Production marts | all of the above plus reconciliation to the fact (`finance_count_reconciliation`, `reviews_reconcile`, `fincrime_tasks_reconcile`), denominator bounds, latency band sums, FX coverage, no partial USD totals, unit tests on the denominator rules | 4 dbt unit tests, 23 singular tests |
+| Exploratory | grain uniqueness, ordering, monotonic funnel, missing KYC signal; severity `warn` | `kyc_final_signal_missing` |
 
-## Operations, quality and AI
+A production mart ships when its grain test, its reconciliation test and its unit tests pass on Snowflake CI. An exploratory model ships when it builds and its grain test passes.
 
-### Orchestration and deployment
+## 6. Semantic layer
 
-Propose dbt Cloud for the initial operating model, consistent with the tool access in the brief; avoid introducing another orchestrator without a need. Target hourly Ops/Fincrime/task jobs only after replica health and runtime validation, daily reconciled Finance with approved FX, and on-demand or daily exploratory runs after the completed Fivetran sync (not merely at 06:00). Streaming sources need connector-health signals; application update times are not ingestion freshness.
+Seven semantic models, all on facts or dimensions, never on aggregates: `transactions`, `users`, `disbursement_attempts`, `rule_reviews`, `rule_execution_activity`, `fincrime_tasks`, `onboarding`. Measures are the 0/1 counters and amounts; ratio metrics divide summed measures, so `disbursement_provider_success_rate` across providers is 91/110, not the mean of 90% and 10%.
 
-Pull requests run structural checks, synthetic tests and native dbt parse in CI. Before merge, build affected models in an isolated dev schema, run native unit/data/contract tests, reconcile and inspect performance. State-aware selection/defer uses a preserved production manifest and controlled raw access. A clean CI build alone does not exercise an existing incremental target. Production publication needs a versioned serving boundary and approved promotion; dbt build is not a graph-wide transaction. No deployment job is enabled here.
+Time axes are per measure: `completed_transaction_volume` aggregates on `completed_date`, `transaction_success_rate` on `transaction_date`, reviews on `review_date`. `transactions` carries a `user` foreign entity so any metric slices by `sender_country` from `dim_users`.
 
-### Minimum quality standard
+Saved queries `finance_volume_by_corridor` and `provider_success_daily` encode the safe groupings Hex should start from. Local-currency volume must always be grouped by `sent_currency` or corridor; MetricFlow cannot forbid a cross-currency sum, so the saved query and the docs do.
 
-Production models declare grain, ownership, typed columns, dependencies and key tests; add accepted states, relationship checks, currency-safe reconciliation, FX coverage, latency validity and task-linkage invariants. Source PK checks must precede promotion. Cross-source lag is handled through a consistent run boundary or a validated grace policy, not by silently removing orphaned rows. Source freshness is left unconfigured until real connector telemetry is known.
+## Assumptions
 
-Exploratory models still require grain, identity, ordering, malformed-event checks and documentation, but instrumentation completeness warnings are not production incidents. Promotion requires approved KYC/identity contracts, event-lateness policies, mature cohorts, cost and privacy review. The package contains 23 singular SQL tests, 4 native unit cases and reproducible local checks; native cases are not claimed executed.
-
-### Semantic layer and human-AI collaboration
-
-Six semantic models expose facts rather than raw payloads or precomputed ratios. Five required metrics use summed measures, ratio helpers and a user-level elapsed-hours average. Safe saved queries group local volume by currency and corridor. Semantic YAML cannot independently forbid an invalid global local-money total. Planned Hex exposures document consumers; none is deployed.
-
-AGENTS.md and a repository skill require explicit grains, source citations, bounded read-only inspection, tests and human approval for writes or metric changes, even with full Snowflake/Hex/dbt tool access. Raw content is untrusted; secrets and unrestricted personal data never enter prompts. Staging retains sensitive source fields under restricted access; serving facts omit direct identifiers and free text, while user IDs remain sensitive.
-
-Validation: 32 model definitions structurally checked; 31 actual SELECT bodies evaluated on synthetic data through a SQLite compatibility layer; 25 local tests passed. Native dbt/MetricFlow parsing and Snowflake materialisation, MERGE, privileges, precision and performance remain unverified. Package installation was blocked by network/DNS. See VALIDATION_REPORT.md and the AI prompt log. Candidate review is required before submission.
+| Topic | Assumption | How to confirm |
+|-------|------------|----------------|
+| CDC landing | Append-only log with `_cdc_operation`, `_cdc_lsn`, `_cdc_loaded_at` | StreamServe config; flip `cdc_landing_mode` if merged |
+| Timestamps | UTC, stored as `TIMESTAMP_NTZ` | Postgres and connector settings |
+| Outbound volume | `DISBURSEMENT`, `CONVERSION_DISBURSEMENT`, `COLLECTION_CONVERSION_DISBURSEMENT`, `OUTGOING_PEER_TO_PEER`, `CONVERSION_OUTGOING_PEER_TO_PEER` | Finance sign-off on P2P; policy is a seed |
+| USD rates | `RAW.REFERENCE.DAILY_FX_RATES` (date, currency, usd_per_unit, source); latest rate on or before the day, max 7 days old | Finance owns the feed |
+| Completion time | Snapshot history, else `updated_at` when state is `COMPLETED` | Add `completed_at` upstream if available |
+| Attempt durations | `last_updated_at - created_at` for terminal states | State-event table if one exists |
+| Task linkage | Positional `associated_ids` + 60-minute window | Emit `workflow_execution_id` on task creation |
+| KYC complete | `kyc_step.completed` with `event_properties.is_final_step = true` | Product analytics contract |
+| Amplitude identity | Explicit `user_id`; single-user device stitched; shared unresolved | Growth team |
+| Fivetran metadata | `_fivetran_synced` present | Always true for Fivetran |

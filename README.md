@@ -1,23 +1,64 @@
-# NALA technical assessment — submission package
+# NALA analytics engineering assessment
 
-Prepared for Karan Manoharan from `AnalyticsTask2026-1.0.md`. Candidate review is still required before submission. This is an AI-assisted implementation, not a claim of independently authored or production-deployed work.
+dbt transformation layer for three sources (payments backend, fincrime service, Amplitude) landing in Snowflake.
+Same project runs on DuckDB locally with synthetic data, so every model, test, snapshot and metric here has been executed.
 
-## The three requested deliverables
+Deliverables:
 
-1. `01_Architecture.pdf` — three pages covering orchestration, materialisations, CDC, joins, quality and semantics. Editable source: `01_Architecture.md`.
-2. `dbt_project/` — complete assessment project: 15 source-table staging models, 4 intermediate models, 9 production marts, 3 exploratory models, a calendar spine, documented SQL, semantic definitions, tests, agent guidance and validation scripts.
-3. `03_AI_Prompt_Log.md` — tool usage, implementation decisions, corrections and honest validation limits.
+| # | Deliverable | Where |
+|---|-------------|-------|
+| 1 | Architecture document | [`docs/01_architecture.md`](docs/01_architecture.md) |
+| 2 | dbt project | this repository (`models/`, `macros/`, `seeds/`, `snapshots/`, `tests/`) |
+| 3 | AI prompt log | [`docs/03_ai_prompt_log.md`](docs/03_ai_prompt_log.md) |
 
-The optional deeper teaching material is packaged separately as `NALA_Assessment_Learning.zip`; it is not part of the concise submission.
+## Run it
 
-## Start here
+```bash
+uv sync            # dbt-core 1.12, dbt-duckdb, dbt-snowflake, MetricFlow, sqlfluff
+make build         # generate synthetic RAW, seed, snapshot, build, test (DuckDB, no credentials)
+make metrics       # validate semantic layer and query the five required metrics
+make lint          # sqlfluff
+```
 
-Read the architecture, then `dbt_project/README.md`. Important design decisions and prerequisites are in `dbt_project/docs/ASSUMPTIONS.md`. Exact validation results are in `VALIDATION_REPORT.md`.
+Production target is Snowflake: `dbt build --target prod` with `SNOWFLAKE_*` environment variables (see `profiles.yml`).
+Dialect differences live in `macros/cross_db.sql`; nothing else changes between engines.
 
-The assessment permits a project that need not run. This implementation goes further with a reproducible synthetic SQL harness, but it has NOT been executed in Snowflake, parsed by native dbt, compiled by MetricFlow, deployed to dbt Cloud, or published in Hex. Those are explicit acceptance gates, not claimed achievements.
+## Requirement to model map
 
-## Do not hide the missing information
+| Requirement | Fact | Daily aggregate | Metric |
+|-------------|------|-----------------|--------|
+| 1 Finance: completed volume by corridor, local + USD | `fct_transactions` | `agg_finance_volume_daily` (completion date), `agg_transactions_daily` (creation cohort) | `completed_transaction_volume`, `completed_transaction_volume_usd`, `transaction_success_rate` |
+| 2 Ops: provider success, time to complete/fail, latency bands | `fct_disbursement_attempts` | `agg_provider_daily` | `disbursement_provider_success_rate` |
+| 3 Fincrime: rule volumes, false positives, review latency | `fct_rule_executions`, `fct_rule_reviews` | `agg_fincrime_daily` | `fincrime_false_positive_rate` |
+| 4 Fincrime task pipeline (Source 1 + 2) | `fct_fincrime_tasks` | `agg_fincrime_tasks_daily` | building blocks in `fincrime_tasks` semantic model |
+| 5 Onboarding funnel (exploratory) | `fct_onboarding_funnel` | `agg_onboarding_daily` | `signup_to_first_transaction_hours` |
 
-USD reference rates are not provided. Task-to-workflow causal IDs are not provided. Dedicated terminal timestamps are not provided. The final KYC instrumentation contract is not provided. The code exposes these gaps rather than inventing facts.
+Dimensions: `dim_users`, `dim_rules`, `dim_providers`. History: `snapshots/snap_transaction_state.sql`.
 
-Only synthetic validation inputs are included; they must never be loaded as real business reference data. No credentials or customer records are included. No repository, dashboard, job or email was created or sent externally.
+## Layout
+
+```
+models/
+  sources.yml                 3 sources + reference rates, freshness, CDC metadata columns
+  staging/{payments,fincrime,amplitude,reference}/   one view per source table, CDC log collapsed
+  intermediate/               classification, workflow context, task-to-workflow candidates
+  marts/{finance,ops,fincrime,core}/                 facts, daily aggregates, dimensions (production)
+  exploratory/                Amplitude onboarding POC, isolated from production selectors
+  semantic/metrics.yml        7 semantic models, 5 required metrics + helpers, saved queries
+  utilities/                  MetricFlow time spine
+  unit_tests.yml, exposures.yml
+macros/      cross_db.sql (adapter dispatch), cdc.sql, incremental.sql, latency_band.sql, safe_ratio.sql
+seeds/reference/             transaction_type_policy.csv (the outbound-volume policy)
+seeds/raw/                   synthetic RAW landing tables, DuckDB only, generated by scripts/
+snapshots/                   transaction state history
+tests/                       singular tests: reconciliation, denominators, FX coverage, band bounds
+docs/                        architecture, prompt log, agent evaluation cases, assessment brief
+AGENTS.md, CLAUDE.md, .mcp.json, config/   AI agent operating contract and tool access
+```
+
+## Conventions
+
+- `stg_<source>__<table>`, `int_<concept>`, `fct_<grain>`, `dim_<entity>`, `agg_<grain>_daily`.
+- Every model YAML has a description, `meta.grain`, `meta.owner`, typed columns, tests.
+- Types: `decimal(p,s)` and `{{ dbt.type_timestamp() }}` (portable). Contracts enforce on Snowflake.
+- Selectors: `production` (marts + ancestors), `exploratory` (Amplitude branch). See `selectors.yml`.

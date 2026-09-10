@@ -6,10 +6,10 @@ sources:
   database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
   schema: '{{ var(''payments_raw_schema'', ''PAYMENTS'') }}'
   loaded_at_field: _cdc_loaded_at
-  freshness:
-    warn_after: {count: 15, period: minute}
-    error_after: {count: 2, period: hour}
   config:
+    freshness:
+      warn_after: {count: 15, period: minute}
+      error_after: {count: 2, period: hour}
     meta:
       connector: StreamServe CDC (near-real-time change log)
   tables:
@@ -512,10 +512,10 @@ sources:
   database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
   schema: '{{ var(''fincrime_raw_schema'', ''FINCRIME'') }}'
   loaded_at_field: _cdc_loaded_at
-  freshness:
-    warn_after: {count: 15, period: minute}
-    error_after: {count: 2, period: hour}
   config:
+    freshness:
+      warn_after: {count: 15, period: minute}
+      error_after: {count: 2, period: hour}
     meta:
       connector: StreamServe CDC (near-real-time change log)
   tables:
@@ -750,10 +750,10 @@ sources:
   database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
   schema: '{{ var(''amplitude_raw_schema'', ''AMPLITUDE'') }}'
   loaded_at_field: _fivetran_synced
-  freshness:
-    warn_after: {count: 26, period: hour}
-    error_after: {count: 30, period: hour}
   config:
+    freshness:
+      warn_after: {count: 26, period: hour}
+      error_after: {count: 30, period: hour}
     meta:
       connector: Fivetran daily batch (~06:00 UTC)
   tables:

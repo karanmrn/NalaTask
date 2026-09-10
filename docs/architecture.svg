@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+  </defs>
+  <style>
+    .box{stroke:#333;stroke-width:1.2;rx:6}
+    .t{fill:#111}
+    .s{fill:#555;font-size:11px}
+    .h{font-weight:bold;font-size:14px;fill:#111}
+    .arrow{stroke:#555;stroke-width:1.4;fill:none;marker-end:url(#a)}
+  </style>
+
+  <!-- column headers -->
+  <text x="90" y="24" class="h">RAW (Snowflake)</text>
+  <text x="330" y="24" class="h">Staging (views)</text>
+  <text x="560" y="24" class="h">Intermediate + history</text>
+  <text x="810" y="24" class="h">Marts (production)</text>
+
+  <!-- sources -->
+  <rect x="20" y="40" width="200" height="86" class="box" fill="#e8f0fe"/>
+  <text x="30" y="60" class="t">Source 1 Payments (Postgres)</text>
+  <text x="30" y="78" class="s">StreamServe CDC change log</text>
+  <text x="30" y="94" class="s">9 tables, 15M tx, 20M attempts</text>
+  <text x="30" y="112" class="s">_cdc_operation / _cdc_lsn / _cdc_loaded_at</text>
+
+  <rect x="20" y="140" width="200" height="86" class="box" fill="#e8f0fe"/>
+  <text x="30" y="160" class="t">Source 2 Fincrime (Postgres)</text>
+  <text x="30" y="178" class="s">StreamServe CDC change log</text>
+  <text x="30" y="194" class="s">5 tables, 30M rule executions</text>
+  <text x="30" y="212" class="s">context JSON: user_id, transaction_id</text>
+
+  <rect x="20" y="240" width="200" height="70" class="box" fill="#fff4e0"/>
+  <text x="30" y="260" class="t">Source 3 Amplitude</text>
+  <text x="30" y="278" class="s">Fivetran daily ~06:00 UTC</text>
+  <text x="30" y="296" class="s">events 100M, _fivetran_synced</text>
+
+  <rect x="20" y="324" width="200" height="54" class="box" fill="#f0f0f0"/>
+  <text x="30" y="344" class="t">Reference: daily_fx_rates</text>
+  <text x="30" y="362" class="s">Finance-approved USD per unit</text>
+
+  <!-- staging -->
+  <rect x="260" y="40" width="210" height="186" class="box" fill="#eef7ee"/>
+  <text x="270" y="60" class="t">stg_payments__* (9)</text>
+  <text x="270" y="78" class="t">stg_fincrime__* (5)</text>
+  <text x="270" y="104" class="s">cdc_current_rows(): latest LSN wins,</text>
+  <text x="270" y="120" class="s">DELETE removed, one row per key</text>
+  <text x="270" y="144" class="s">cast, rename, JSON to variant</text>
+  <text x="270" y="160" class="s">unique + not_null + accepted_values</text>
+  <text x="270" y="184" class="s">freshness: _cdc_loaded_at</text>
+  <text x="270" y="200" class="s">warn 15 min / error 2 h</text>
+
+  <rect x="260" y="240" width="210" height="70" class="box" fill="#fff4e0"/>
+  <text x="270" y="260" class="t">stg_amplitude__events</text>
+  <text x="270" y="278" class="s">freshness: _fivetran_synced</text>
+  <text x="270" y="296" class="s">warn 26 h / error 30 h</text>
+
+  <rect x="260" y="324" width="210" height="54" class="box" fill="#f0f0f0"/>
+  <text x="270" y="344" class="t">stg_reference__daily_fx_rates</text>
+  <text x="270" y="362" class="s">unique (date, currency), positive</text>
+
+  <!-- intermediate -->
+  <rect x="510" y="40" width="220" height="70" class="box" fill="#f3eefc"/>
+  <text x="520" y="60" class="t">snap_transaction_state</text>
+  <text x="520" y="78" class="s">type 2 history of state</text>
+  <text x="520" y="96" class="s">source of completed_at</text>
+
+  <rect x="510" y="124" width="220" height="102" class="box" fill="#f3eefc"/>
+  <text x="520" y="144" class="t">int_transactions_classified</text>
+  <text x="520" y="162" class="s">seed policy: 5 outbound types</text>
+  <text x="520" y="184" class="t">int_workflow_context</text>
+  <text x="520" y="202" class="t">int_fincrime_task_context</text>
+  <text x="520" y="218" class="t">int_task_workflow_candidates</text>
+
+  <rect x="510" y="240" width="220" height="70" class="box" fill="#fff4e0"/>
+  <text x="520" y="260" class="t">int_onboarding_events</text>
+  <text x="520" y="278" class="s">90-day window, table</text>
+  <text x="520" y="296" class="s">identity: explicit > single-device</text>
+
+  <!-- marts -->
+  <rect x="770" y="40" width="310" height="60" class="box" fill="#e6f4ea"/>
+  <text x="780" y="60" class="t">Finance: fct_transactions (incremental)</text>
+  <text x="780" y="78" class="s">agg_finance_volume_daily (completed_date)</text>
+  <text x="780" y="94" class="s">agg_transactions_daily (creation cohort)</text>
+
+  <rect x="770" y="110" width="310" height="44" class="box" fill="#e6f4ea"/>
+  <text x="780" y="130" class="t">Ops: fct_disbursement_attempts (incremental)</text>
+  <text x="780" y="146" class="s">agg_provider_daily: success rate, 6 latency bands</text>
+
+  <rect x="770" y="164" width="310" height="62" class="box" fill="#e6f4ea"/>
+  <text x="780" y="184" class="t">Fincrime: fct_rule_executions (incr), fct_rule_reviews</text>
+  <text x="780" y="202" class="s">fct_fincrime_tasks: UNIQUE_INFERRED / AMBIGUOUS / UNMATCHED</text>
+  <text x="780" y="218" class="s">agg_fincrime_daily, agg_fincrime_tasks_daily</text>
+
+  <rect x="770" y="240" width="310" height="70" class="box" fill="#fff4e0"/>
+  <text x="780" y="260" class="t">Exploratory: fct_onboarding_funnel (view)</text>
+  <text x="780" y="278" class="s">agg_onboarding_daily; tests warn only</text>
+  <text x="780" y="296" class="s">never in the production selector</text>
+
+  <rect x="770" y="324" width="310" height="54" class="box" fill="#e6f4ea"/>
+  <text x="780" y="344" class="t">Core: dim_users, dim_rules, dim_providers</text>
+  <text x="780" y="362" class="s">metricflow_time_spine</text>
+
+  <!-- semantic layer -->
+  <rect x="510" y="400" width="570" height="70" class="box" fill="#fce8e6"/>
+  <text x="520" y="420" class="t">dbt Semantic Layer (MetricFlow): 7 semantic models, 5 required metrics + helpers, 2 saved queries</text>
+  <text x="520" y="438" class="s">completed_transaction_volume (completed_date) | transaction_success_rate (transaction_date) | disbursement_provider_success_rate</text>
+  <text x="520" y="456" class="s">fincrime_false_positive_rate (review_date) | signup_to_first_transaction_hours (signup day, country) | Hex reads metrics, not tables</text>
+
+  <!-- jobs -->
+  <rect x="20" y="400" width="470" height="140" class="box" fill="#f7f7f7"/>
+  <text x="30" y="420" class="h">dbt Cloud jobs</text>
+  <text x="30" y="440" class="s">ops_hourly: tag:ops tag:fincrime tag:tasks + parents, snapshot first, 3-day lookback merge</text>
+  <text x="30" y="458" class="s">finance_daily 01:00 UTC: tag:finance, gated on FX freshness, reconciliation tests block publish</text>
+  <text x="30" y="476" class="s">growth_daily: selector:exploratory, triggered by Fivetran sync-complete webhook</text>
+  <text x="30" y="494" class="s">CI: GitHub Actions on DuckDB (build, tests, mf validate, sqlfluff, parse --target prod)</text>
+  <text x="30" y="512" class="s">then dbt Cloud slim CI: state:modified+ into PR schema, defer to prod manifest</text>
+  <text x="30" y="530" class="s">Same code on DuckDB (dev) and Snowflake (prod); dialect isolated in macros/cross_db.sql</text>
+
+  <!-- arrows -->
+  <path d="M220,83 L260,83" class="arrow"/>
+  <path d="M220,183 L260,183" class="arrow"/>
+  <path d="M220,275 L260,275" class="arrow"/>
+  <path d="M220,351 L260,351" class="arrow"/>
+  <path d="M470,110 L510,75" class="arrow"/>
+  <path d="M470,150 L510,170" class="arrow"/>
+  <path d="M470,275 L510,275" class="arrow"/>
+  <path d="M470,351 L770,351" class="arrow"/>
+  <path d="M730,75 L770,70" class="arrow"/>
+  <path d="M730,160 L770,130" class="arrow"/>
+  <path d="M730,200 L770,195" class="arrow"/>
+  <path d="M730,275 L770,275" class="arrow"/>
+  <path d="M925,378 L925,400" class="arrow"/>
+</svg>

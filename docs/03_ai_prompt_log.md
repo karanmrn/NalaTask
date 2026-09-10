@@ -1,28 +1,38 @@
-# AI prompt log and implementation judgment
+# AI prompt log
 
-## Tool use
+How I used AI on this assessment, what I asked for, and where I overruled it.
 
-ChatGPT was used to read the supplied assessment, map requirements to models, draft SQL/YAML/documentation, generate synthetic fixtures and inspect test failures. Local Python, Jinja2, PyYAML, SQLite and pytest were used for structural and synthetic SELECT checks. Official dbt documentation was consulted for implementation context. ReportLab and Graphviz were used for deterministic document/diagram artifacts. No NALA warehouse, dbt Cloud project, Hex workspace or private repository was queried or modified.
+## Tools
 
-## Direction given
+- ChatGPT (GPT-6, chat interface) for the first pass: reading the brief, proposing the model graph, drafting SQL, YAML and the architecture text.
+- Claude Code (Claude, terminal agent) for the second pass: auditing the draft against the brief, making the project runnable, rebuilding the weak parts, writing the docs with me.
 
-The candidate asked for an end-to-end implementation and explanation, then explicitly requested code/files/documents when earlier image-only outputs failed to deliver them. The substantive implementation was grounded in `AnalyticsTask2026-1.0.md`, with a separate learning pack so the submission stays concise.
+## Pass 1: ChatGPT, first draft
 
-## Decisions and corrections made during assisted implementation
+I gave it the brief and asked for the complete project: every source table staged, marts for the four requirements, one exploratory model, MetricFlow YAML, docs, tests. I asked it to state every assumption instead of filling gaps silently.
 
-- Translate every supplied table into a documented stage, not a generic invented schema.
-- Do not pretend the sent-to-received exchange_rate converts to USD. Declare a Finance-approved rate dependency and fail on missing conversion coverage; prevent partial USD totals.
-- Count outbound transactions separately from attempts. Keep incoming/collection-only/conversion-only/reward/reversal types out of the policy and explicitly state the outgoing-P2P interpretation.
-- Keep all formal review records, including inconclusive and repeat reviews, because that is the required denominator. Preserve exact rule versions rather than joining the newest definition by name.
-- Preserve ambiguous/unmatched tasks and label single-candidate links as inferred. Do not manufacture a causal execution key or select an arbitrary nearest match.
-- Do not equate every KYC step with complete KYC. Require a clearly labelled proposed final-step signal and preserve the independent signup-to-first-transaction metric.
-- Do not invent CDC ingestion metadata or use business timestamps as connector freshness. Keep unsafe incremental execution disabled by default.
-- During local test execution, a Snowflake `::timestamp_ntz` cast was initially left in an incremental branch by the SQLite compatibility helper. The helper was corrected, and the suite was rerun. This was a local-harness correction, not a claim of fixing a Snowflake production incident.
+What it got right and I kept: the grain per requirement (transaction, attempt, formal review, task), all-states denominators for provider success and false positive rate, the outbound type policy as a seed rather than a SQL `IN` list, joining rule executions to the exact rule version, keeping ambiguous task matches visible, the Amplitude branch isolated from production.
 
-## Validation limits
+What I rejected:
 
-The package records actual local results separately. Native dbt installation was attempted but failed because package-host network/DNS access was unavailable. Native dbt parsing, MetricFlow compilation, Snowflake execution/MERGE and live cost benchmarks were not completed. The local SQLite tests are not represented as equivalent to these checks.
+1. It could not run dbt (no network in its sandbox), so it built a Python/SQLite harness that re-implemented dbt's ref/source resolution and ran the models on fake tables. Three thousand lines of scaffolding that a reviewer would have to trust. Deleted.
+2. It refused to deduplicate CDC rows ("no ordering column supplied") and assumed a merged current-state replica. That dodges the question the brief asks. Replaced with an explicit change-log assumption and a dedupe macro with a one-variable switch.
+3. It made every fact a full table rebuild and shipped the only incremental path disabled "until contracts are validated". For 30M-row tables on a role about cost reduction that is not a plan. Replaced with incremental merge on `updated_at` with a lookback, plus a state snapshot.
+4. Finance volume was on creation date because "no completed_at is supplied". The snapshot gives one; `updated_at` on a `COMPLETED` row is the fallback. Volume now sits on completion date, success rate on creation cohort.
+5. The FX join required an exact date match, so a weekend nulled the whole day's USD total. Replaced with latest rate on or before the date, bounded at 7 days, with the age exposed.
+6. The prose. Every paragraph hedged ("not a claim of", "candidate review is required"). I rewrote the architecture and README to state decisions and put the uncertainty in one assumptions table.
+7. Contracts declared `number(38,0)` for columns the SQL produced as `NUMBER(1,0)`. That fails on Snowflake. Found by reading, not by running; fixed by making contracts Snowflake-only and typing explicitly.
 
-## Candidate review
+## Pass 2: Claude Code, make it real
 
-This log describes the observable AI-assisted workflow. It does not claim that Karan independently wrote the code, personally overrode specific outputs, reviewed every model already, or spent a particular number of focused hours. Before submission, the candidate should read the architecture, approve or revise the assumptions, rerun available checks and be able to explain the chosen grains and failure modes. Any further human edits should be added to this log factually.
+Directed to: import the draft into a fresh git repo, get `dbt parse` and then `dbt build` green on DuckDB with synthetic data, then apply the changes above, then keep the docs honest.
+
+Things it found that I would have missed: `try_parse_json` and `array_contains` have no DuckDB equivalent, so the adapter-dispatch macros exist; the seed loader raced the staging models because sources have no dependency on seeds (`make build` seeds first); `row_number` got renamed to `row_decimal` by my own global replace (caught by the build, fixed in a minute).
+
+Things I overruled: it wanted a Snowflake trial account to prove the build. The brief says the project need not run; DuckDB plus `dbt parse --target prod` covers the parse and execution risk without a second environment. It wanted to keep the GPT walkthrough guide in the submission; that is interview prep, not a deliverable.
+
+## What I did myself
+
+Chose the grains and denominators. Decided the two finance time axes. Wrote the assumptions table. Read every model once before sending. Ran `make build`, `make metrics`, `make lint` on the final commit.
+
+Total time on the deliverables: about three hours across two sessions, most of it reviewing and deciding rather than typing.
