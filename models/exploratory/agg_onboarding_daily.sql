@@ -1,4 +1,6 @@
-select cohort_date, signup_country,
+select
+    cohort_date,
+    signup_country,
     sum(started_count) as signup_started,
     sum(ordered_signup_count) as signup_completed,
     sum(ordered_kyc_count) as kyc_completed,

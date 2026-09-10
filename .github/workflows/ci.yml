@@ -1,21 +1,28 @@
-name: validate-assessment
-on: [pull_request, workflow_dispatch]
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
 permissions:
   contents: read
 jobs:
-  offline-and-parse:
+  build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: dbt_project
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: pip install -r requirements.txt
-      - run: python validation/check_project.py
-      - run: python -m pytest validation -q
-      - run: dbt parse --profiles-dir ci --no-partial-parse
-# Warehouse CI belongs in an approved dbt Cloud CI job using an isolated schema,
-# a read-only raw role, a reviewed production manifest, and explicit data tests.
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - name: Lint SQL
+        run: uv run sqlfluff lint models tests analyses
+      - name: Load synthetic RAW
+        run: |
+          uv run python scripts/generate_synthetic_raw.py
+          uv run dbt seed --select path:seeds/raw
+      - name: Build, snapshot, test (DuckDB)
+        run: uv run dbt build --exclude path:seeds/raw
+      - name: Validate semantic layer
+        run: uv run mf validate-configs
+      - name: Parse against Snowflake adapter (no connection)
+        run: uv run dbt parse --target prod
+# Warehouse CI (dbt Cloud): on PR, build `state:modified+` into an isolated PR schema, defer
+# unchanged models to the production manifest, run tests, tear down the schema on merge.

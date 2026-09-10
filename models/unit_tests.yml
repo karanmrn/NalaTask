@@ -69,39 +69,40 @@ unit_tests:
       task_count: 1
 - name: daily_usd_total_is_all_or_unknown
   description: A complete local-currency total may exist while the USD total is unavailable.
-  model: agg_transactions_daily
+  model: agg_finance_volume_daily
   given:
   - input: ref('fct_transactions')
     rows:
     - transaction_id: t1
-      transaction_date: '2026-09-01'
+      completed_date: '2026-09-01'
       currency_corridor: GBP-KES
       sent_currency: GBP
+      received_currency: KES
       transaction_type: DISBURSEMENT
       is_volume_qualifying: true
-      qualifying_count: 1
       completed_qualifying_count: 1
       completed_sent_amount: 100
       completed_sent_amount_usd: 130
       is_missing_fx: false
+      fx_rate_age_days: 0
     - transaction_id: t2
-      transaction_date: '2026-09-01'
+      completed_date: '2026-09-01'
       currency_corridor: GBP-KES
       sent_currency: GBP
+      received_currency: KES
       transaction_type: DISBURSEMENT
       is_volume_qualifying: true
-      qualifying_count: 1
       completed_qualifying_count: 1
       completed_sent_amount: 50
       completed_sent_amount_usd: null
       is_missing_fx: true
+      fx_rate_age_days: null
   expect:
     rows:
     - completed_transactions: 2
       completed_sent_amount: 150
       missing_fx_transactions: 1
       completed_sent_amount_usd: null
-      transaction_success_rate: 1.0
 - name: provider_rate_uses_all_states
   description: Pending attempts stay in the success-rate denominator but not completed-duration means.
   model: agg_provider_daily

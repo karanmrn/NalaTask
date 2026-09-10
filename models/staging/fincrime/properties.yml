@@ -1,8 +1,8 @@
 version: 2
 models:
 - name: stg_fincrime__rules
-  description: One row per source rules record. Typed current state; no financial filters or hidden deduplication.
-    Restricted staging retains source-sensitive fields.
+  description: 'One row per source rules record. Typed current state after CDC log dedupe (latest _cdc_lsn wins,
+    deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -41,7 +41,7 @@ models:
     data_type: varchar
   - name: rule_version
     description: Version number. Higher is newer.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: created_at
     description: Timestamp when this version was created.
     data_type: timestamp_ntz
@@ -51,9 +51,13 @@ models:
   - name: deleted_at
     description: Timestamp when this rule version was soft-deleted. Null if active.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_fincrime__workflows
-  description: One row per source workflows record. Typed current state; no financial filters or hidden deduplication.
-    Restricted staging retains source-sensitive fields.
+  description: 'One row per source workflows record. Typed current state after CDC log dedupe (latest _cdc_lsn wins,
+    deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -79,12 +83,12 @@ models:
     description: Workflow type (e.g. `PRE_TRANSACTION`, `POST_TRANSACTION`, `USER_ONBOARDING`).
     data_type: varchar
   - name: config
-    description: Workflow configuration. Contains a `nodes` array where each node has `type` (e.g. `RULE`)
-      and `config.rule_id` referencing a rule.
+    description: Workflow configuration. Contains a `nodes` array where each node has `type` (e.g. `RULE`) and `config.rule_id`
+      referencing a rule.
     data_type: variant
   - name: workflow_version
     description: Version number. Higher is newer.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: created_at
     description: Timestamp when this version was created.
     data_type: timestamp_ntz
@@ -94,9 +98,13 @@ models:
   - name: deleted_at
     description: Timestamp when this workflow version was soft-deleted. Null if active.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_fincrime__workflow_executions
-  description: One row per source workflow_executions record. Typed current state; no financial filters or
-    hidden deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source workflow_executions record. Typed current state after CDC log dedupe (latest
+    _cdc_lsn wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -131,9 +139,9 @@ models:
           - FAIL
           - ERROR
   - name: context
-    description: The business context for this execution. Contains `user_id` (string, references `Source 1
-      users.id`) and `transaction_id` (string, references `Source 1 transactions_transaction.id`). One or both
-      may be present depending on the trigger event.
+    description: The business context for this execution. Contains `user_id` (string, references `Source 1 users.id`)
+      and `transaction_id` (string, references `Source 1 transactions_transaction.id`). One or both may be present
+      depending on the trigger event.
     data_type: variant
   - name: created_at
     description: Timestamp when the execution was initiated.
@@ -150,9 +158,13 @@ models:
   - name: actions
     description: Array of actions triggered by this execution (e.g. `BLOCK_USER`, `HOLD_TRANSACTION`, `CREATE_TASK`).
     data_type: variant
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_fincrime__rule_executions
-  description: One row per source rule_executions record. Typed current state; no financial filters or hidden
-    deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source rule_executions record. Typed current state after CDC log dedupe (latest _cdc_lsn
+    wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -213,8 +225,8 @@ models:
     description: Error details if the rule evaluation failed. Null on success.
     data_type: varchar
   - name: review
-    description: 'Review status, if the rule execution was reviewed. Values: `PENDING`, `REVIEWED`. Null if
-      no review is required.'
+    description: 'Review status, if the rule execution was reviewed. Values: `PENDING`, `REVIEWED`. Null if no review
+      is required.'
     data_type: varchar
     data_tests:
     - accepted_values:
@@ -231,9 +243,13 @@ models:
   - name: reviewed_at
     description: Timestamp when the review was completed. Null if not reviewed.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_fincrime__rule_execution_reviews
-  description: One row per source rule_execution_reviews record. Typed current state; no financial filters
-    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source rule_execution_reviews record. Typed current state after CDC log dedupe (latest
+    _cdc_lsn wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -275,4 +291,8 @@ models:
     data_type: varchar
   - name: reviewed_at
     description: Timestamp when the review was completed.
+    data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
     data_type: timestamp_ntz

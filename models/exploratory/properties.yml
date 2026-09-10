@@ -84,32 +84,32 @@ models:
     data_type: date
   - name: started_count
     description: 1 when start observed.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: ordered_signup_count
     description: 1 when start and subsequent signup completion observed.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: ordered_kyc_count
     description: 1 when ordered chain reaches confirmed final KYC.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: ordered_transaction_count
     description: 1 when ordered chain reaches transaction.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: signup_to_first_transaction_hours
     description: Required exploratory metric; observed converters with resolved user only, independent of KYC
       presence.
-    data_type: number(38,6)
+    data_type: decimal(38,6)
   - name: start_to_signup_hours
     description: Observed first-to-second-step duration.
-    data_type: number(38,6)
+    data_type: decimal(38,6)
   - name: signup_to_kyc_hours
     description: Observed second-to-third-step duration.
-    data_type: number(38,6)
+    data_type: decimal(38,6)
   - name: kyc_to_transaction_hours
     description: Observed third-to-fourth-step duration.
-    data_type: number(38,6)
+    data_type: decimal(38,6)
   - name: observation_window_days
     description: Bounded lookback; report left and right censoring.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
 - name: agg_onboarding_daily
   description: One row per observed cohort day and signup-event country. Proof of concept, not production conversion
     attribution; country is unknown for unconverted starts.
@@ -127,16 +127,16 @@ models:
     data_type: varchar
   - name: signup_started
     description: Count of entities reaching this step in strict order.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: signup_completed
     description: Count of entities reaching this step in strict order.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: kyc_completed
     description: Count of entities reaching this step in strict order.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: transaction_completed
     description: Count of entities reaching this step in strict order.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: start_to_signup_rate
     description: Ratio of summed stage indicators, null on zero denominator.
     data_type: float
@@ -148,13 +148,13 @@ models:
     data_type: float
   - name: avg_start_to_signup_hours
     description: Mean elapsed hours among observed converters; censored nonconverters excluded.
-    data_type: number(38,6)
+    data_type: decimal(38,6)
   - name: avg_signup_to_kyc_hours
     description: Mean elapsed hours among observed converters; censored nonconverters excluded.
-    data_type: number(38,6)
+    data_type: decimal(38,6)
   - name: avg_kyc_to_transaction_hours
     description: Mean elapsed hours among observed converters; censored nonconverters excluded.
-    data_type: number(38,6)
+    data_type: decimal(38,6)
   data_tests:
   - unique_combination:
       arguments:

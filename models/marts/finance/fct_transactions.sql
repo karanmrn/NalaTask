@@ -26,25 +26,27 @@ fx_candidates as (
         r.usd_per_unit,
         r.rate_source,
         row_number() over (partition by t.transaction_id order by r.rate_date desc) as recency_rank
-    from transactions t
-    inner join rates r
-        on r.currency = t.sent_currency
-        and r.rate_date <= t.transaction_date
-        and r.rate_date >= {{ dbt.dateadd('day', '-' ~ var('fx_max_staleness_days', 7), 't.transaction_date') }}
+    from transactions as t
+    inner join rates as r
+        on
+            t.sent_currency = r.currency
+            and t.transaction_date >= r.rate_date
+            and r.rate_date >= {{ dbt.dateadd('day', '-' ~ var('fx_max_staleness_days', 7), 't.transaction_date') }}
 ),
 
 fx as (
-    select * from fx_candidates where recency_rank = 1
+    select * from fx_candidates
+    where recency_rank = 1
 ),
 
 joined as (
     select
         t.*,
         case when t.sent_currency = 'USD' then t.transaction_date else fx.fx_rate_date end as fx_rate_date,
-        case when t.sent_currency = 'USD' then cast(1 as decimal(38,12)) else fx.usd_per_unit end as usd_per_unit,
+        case when t.sent_currency = 'USD' then cast(1 as decimal(38, 12)) else fx.usd_per_unit end as usd_per_unit,
         case when t.sent_currency = 'USD' then 'USD_IDENTITY' else fx.rate_source end as fx_rate_source
-    from transactions t
-    left join fx on fx.transaction_id = t.transaction_id
+    from transactions as t
+    left join fx on t.transaction_id = fx.transaction_id
 )
 
 select
@@ -72,9 +74,9 @@ select
     usd_per_unit,
     fx_rate_source,
     case
-        when completed_qualifying_count = 0 then cast(0 as decimal(38,8))
+        when completed_qualifying_count = 0 then cast(0 as decimal(38, 8))
         when usd_per_unit is null or usd_per_unit <= 0 then null
-        else cast(completed_sent_amount * usd_per_unit as decimal(38,8))
+        else cast(completed_sent_amount * usd_per_unit as decimal(38, 8))
     end as completed_sent_amount_usd,
     completed_qualifying_count = 1 and (usd_per_unit is null or usd_per_unit <= 0) as is_missing_fx
 from joined

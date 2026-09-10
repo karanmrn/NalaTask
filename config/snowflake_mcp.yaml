@@ -1,0 +1,15 @@
+# Snowflake MCP service config for agents. Read-only role, extra-small warehouse, statement guardrails.
+sql_statement_allowed:
+  - Select
+  - Describe
+  - Show
+sql_statement_disallowed:
+  - Delete
+  - Update
+  - Insert
+  - Merge
+  - Create
+  - Drop
+  - Alter
+  - Truncate
+  - Grant

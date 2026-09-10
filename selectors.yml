@@ -8,6 +8,8 @@ selectors:
           parents: true
         - method: fqn
           value: metricflow_time_spine
+        - method: path
+          value: models/marts/core
   - name: exploratory
     description: On-demand growth branch plus its ancestors; no production schedule dependency.
     definition:

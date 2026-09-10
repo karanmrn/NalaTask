@@ -1,0 +1,39 @@
+version: 2
+models:
+- name: stg_reference__daily_fx_rates
+  description: 'One row per currency and rate date. Finance-approved USD rate: 1 unit of currency = usd_per_unit
+    USD. Declared dependency, not one of the three supplied sources.'
+  config:
+    meta:
+      owner: finance-data
+      grain: One row per currency and rate date
+    tags:
+    - staging
+    - reference
+  columns:
+  - name: rate_date
+    description: Effective UTC business date.
+    data_type: date
+    data_tests:
+    - not_null
+  - name: currency
+    description: ISO sending currency.
+    data_type: varchar
+    data_tests:
+    - not_null
+  - name: usd_per_unit
+    description: USD value of one unit of currency. Positive.
+    data_type: decimal(38,12)
+    data_tests:
+    - not_null
+  - name: rate_source
+    description: Provenance of the approved rate.
+    data_type: varchar
+    data_tests:
+    - not_null
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - rate_date
+        - currency

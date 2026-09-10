@@ -1,8 +1,8 @@
 version: 2
 models:
 - name: int_transactions_classified
-  description: One row per transaction. Classification and creation-day cohort; current states restate historical
-    cohorts.
+  description: One row per transaction. Outbound-volume policy applied; completed_at from the state snapshot history,
+    else updated_at when current state is COMPLETED.
   config:
     meta:
       owner: data-engineering
@@ -28,7 +28,7 @@ models:
     data_type: varchar
   - name: sent_amount
     description: Amount in sending currency; not revenue.
-    data_type: number(38,8)
+    data_type: decimal(38,8)
   - name: sent_currency
     description: Sending currency.
     data_type: varchar
@@ -41,30 +41,36 @@ models:
   - name: updated_at
     description: Last state update, not guaranteed completion time.
     data_type: timestamp_ntz
+  - name: completed_at
+    description: First observed COMPLETED transition (snapshot), else updated_at when state is COMPLETED. Null otherwise.
+    data_type: timestamp_ntz
+  - name: completed_date
+    description: UTC date of completed_at. Finance volume axis.
+    data_type: date
   - name: transaction_date
-    description: UTC creation cohort date, not completion date.
+    description: UTC creation date. Cohort axis for success rate.
     data_type: date
   - name: currency_corridor
     description: Sending-receiving currency pair.
     data_type: varchar
   - name: is_volume_qualifying
-    description: Five-type outbound policy.
+    description: True for the five outbound types in seeds/reference/transaction_type_policy.csv.
     data_type: boolean
   - name: has_unmapped_type
     description: True indicates policy drift; blocks production.
     data_type: boolean
   - name: qualifying_count
     description: 1 for qualifying transactions of any state.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: completed_qualifying_count
     description: 1 only for completed qualifying transactions.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: completed_sent_amount
     description: Qualifying completed amount, otherwise zero; group by currency.
-    data_type: number(38,8)
+    data_type: decimal(38,8)
 - name: int_workflow_context
-  description: One row per workflow execution. Extracted typed entity identifiers and task-relevant action
-    flags; raw free-text errors are not exposed.
+  description: One row per workflow execution. Extracted typed entity identifiers and task-relevant action flags;
+    raw free-text errors are not exposed.
   config:
     meta:
       owner: data-engineering
@@ -101,8 +107,8 @@ models:
     description: Relevant action exists; correlation remains inferred.
     data_type: boolean
 - name: int_fincrime_task_context
-  description: One row per fincrime task. Typed array conventions are provisional; unsupported task types are
-    not guessed from an untyped UUID. Disbursement context can supply an explicit parent transaction.
+  description: One row per fincrime task. Typed array conventions are provisional; unsupported task types are not
+    guessed from an untyped UUID. Disbursement context can supply an explicit parent transaction.
   config:
     meta:
       owner: data-engineering

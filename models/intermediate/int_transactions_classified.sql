@@ -38,9 +38,9 @@ classified as (
         t.sent_currency || '-' || t.received_currency as currency_corridor,
         coalesce(p.is_volume_qualifying, false) as is_volume_qualifying,
         p.transaction_type is null as has_unmapped_type
-    from transactions t
-    left join policy p on t.transaction_type = p.transaction_type
-    left join state_history h on t.transaction_id = h.transaction_id
+    from transactions as t
+    left join policy as p on t.transaction_type = p.transaction_type
+    left join state_history as h on t.transaction_id = h.transaction_id
 )
 
 select

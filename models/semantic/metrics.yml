@@ -1,8 +1,9 @@
 version: 2
 semantic_models:
 - name: transactions
-  description: Creation-day cohort in UTC, current state; Finance-approved five-type eligibility. Historical dates
-    restate. Required grouping for local money is a serving contract, not an automatic MetricFlow constraint.
+  description: One row per transaction. Volume measures aggregate on completed_date (when money moved);
+    cohort measures (success rate) aggregate on transaction_date (creation). Always group local-currency
+    volume by sent_currency or corridor; a cross-currency sum has no meaning.
   model: ref('fct_transactions')
   defaults:
     agg_time_dimension: transaction_date
@@ -10,10 +11,18 @@ semantic_models:
   - name: transaction
     type: primary
     expr: transaction_id
+  - name: user
+    type: foreign
+    expr: user_id
   dimensions:
   - name: transaction_date
     type: time
-    description: transaction date
+    description: UTC creation date (cohort axis)
+    type_params:
+      time_granularity: day
+  - name: completed_date
+    type: time
+    description: UTC completion date (volume axis)
     type_params:
       time_granularity: day
   - name: currency_corridor
@@ -27,10 +36,15 @@ semantic_models:
     description: transaction type
   measures:
   - name: completed_transaction_volume_measure
-    description: Sum only within one sending currency. Group/filter by sent_currency or corridor; no meaningful
-      global local-currency total.
+    description: Completed sent amount in sending currency, on completion date. Group by sent_currency or corridor.
     agg: sum
     expr: completed_sent_amount
+    agg_time_dimension: completed_date
+  - name: completed_transaction_volume_usd_measure
+    description: Completed sent amount converted with the approved daily USD rate, on completion date.
+    agg: sum
+    expr: completed_sent_amount_usd
+    agg_time_dimension: completed_date
   - name: qualified_transactions_measure
     description: qualifying_count
     agg: sum
@@ -39,6 +53,35 @@ semantic_models:
     description: completed_qualifying_count
     agg: sum
     expr: completed_qualifying_count
+- name: users
+  description: One row per user. Joins to transactions through the user entity for sender_country slicing.
+  model: ref('dim_users')
+  defaults:
+    agg_time_dimension: registered_date
+  entities:
+  - name: user
+    type: primary
+    expr: user_id
+  dimensions:
+  - name: registered_date
+    type: time
+    description: registration date
+    type_params:
+      time_granularity: day
+  - name: sender_country
+    type: categorical
+    description: ISO country the user sends from
+  - name: user_status
+    type: categorical
+    description: current account status
+  - name: is_kyc_approved
+    type: categorical
+    description: whether the user passed KYC
+  measures:
+  - name: users_measure
+    description: user count
+    agg: count_distinct
+    expr: user_id
 - name: disbursement_attempts
   description: One row per attempt. All states are in the denominator. Use attempt provider, not parent disbursement
     provider.
@@ -209,11 +252,18 @@ semantic_models:
 metrics:
 - name: completed_transaction_volume
   label: Completed Transaction Volume
-  description: REQUIRED. Completed qualifying sent amount in local currency. Always select a sending currency/corridor;
-    no cross-currency grand total. UTC creation date; not completion-date accounting.
+  description: Sum of sent_amount for completed, volume-qualifying transactions, by completion date. Slice by
+    corridor, sending currency, date. Always group by a currency; no cross-currency grand total.
   type: simple
   type_params:
     measure: completed_transaction_volume_measure
+- name: completed_transaction_volume_usd
+  label: Completed Transaction Volume (USD)
+  description: Completed qualifying sent amount converted to USD with the approved daily rate. Null when a
+    rate is missing rather than a partial sum.
+  type: simple
+  type_params:
+    measure: completed_transaction_volume_usd_measure
 - name: completed_qualifying_transactions
   label: Completed Qualifying Transactions
   description: 'Helper numerator: completed five-type outbound transactions.'

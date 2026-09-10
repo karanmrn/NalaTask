@@ -1,0 +1,16 @@
+version: 2
+snapshots:
+- name: snap_transaction_state
+  description: Type 2 history of transaction_state per transaction_id, captured on every run. Source of completed_at.
+    Grows only when a state changes.
+  columns:
+  - name: transaction_id
+    description: Transaction key.
+  - name: transaction_state
+    description: State observed at dbt_valid_from.
+  - name: updated_at
+    description: Source updated_at at capture time (timestamp strategy).
+  - name: dbt_valid_from
+    description: When this state version became current.
+  - name: dbt_valid_to
+    description: When it stopped being current; null if current.

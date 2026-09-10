@@ -1,8 +1,8 @@
 version: 2
 models:
 - name: stg_amplitude__events
-  description: One row per source events record. Typed current state; no financial filters or hidden deduplication.
-    Restricted staging retains source-sensitive fields.
+  description: 'One row per source events record. Typed current state after CDC log dedupe (latest _cdc_lsn wins,
+    deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -19,8 +19,8 @@ models:
     - not_null
     - unique
   - name: user_id
-    description: The NALA user ID (matches `Source 1 users.id`). Null for anonymous events before the user
-      logs in or creates an account.
+    description: The NALA user ID (matches `Source 1 users.id`). Null for anonymous events before the user logs
+      in or creates an account.
     data_type: varchar
   - name: device_id
     description: Unique device identifier. Present for all events including anonymous ones.
@@ -36,8 +36,7 @@ models:
     description: Event-specific properties. Structure varies by event type.
     data_type: variant
   - name: user_properties
-    description: User properties at the time of the event. May contain `email`, `account_status`, `plan_type`,
-      `signup_date`.
+    description: User properties at the time of the event. May contain `email`, `account_status`, `plan_type`, `signup_date`.
     data_type: variant
   - name: platform
     description: 'Client platform. Values: `iOS`, `Android`.'
@@ -62,7 +61,11 @@ models:
     data_type: varchar
   - name: session_id
     description: Session identifier grouping events within a single app session.
-    data_type: number(38,0)
+    data_type: decimal(38,0)
   - name: server_upload_time
     description: Timestamp when Amplitude's servers received the event.
+    data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
     data_type: timestamp_ntz

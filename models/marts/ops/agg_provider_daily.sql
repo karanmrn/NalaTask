@@ -1,4 +1,6 @@
-select attempt_date, provider_name,
+select
+    attempt_date,
+    provider_name,
     sum(attempt_count) as attempts,
     sum(completed_attempt_count) as completed_attempts,
     sum(failed_attempt_count) as failed_attempts,

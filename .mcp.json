@@ -1,0 +1,34 @@
+{
+  "_comment": "Tool access for AI coding agents. dbt MCP exposes project metadata, semantic layer queries and dbt commands. Snowflake MCP exposes read-only warehouse inspection. Credentials come from the environment, never from this file.",
+  "mcpServers": {
+    "dbt": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "dbt-mcp",
+        "dbt-mcp"
+      ],
+      "env": {
+        "DBT_PROJECT_DIR": ".",
+        "DBT_PATH": ".venv/bin/dbt",
+        "DBT_HOST": "${DBT_HOST}",
+        "DBT_TOKEN": "${DBT_TOKEN}",
+        "DBT_PROD_ENV_ID": "${DBT_PROD_ENV_ID}"
+      }
+    },
+    "snowflake": {
+      "command": "uvx",
+      "args": [
+        "snowflake-labs-mcp",
+        "--service-config-file",
+        "config/snowflake_mcp.yaml"
+      ],
+      "env": {
+        "SNOWFLAKE_ACCOUNT": "${SNOWFLAKE_ACCOUNT}",
+        "SNOWFLAKE_USER": "${SNOWFLAKE_USER}",
+        "SNOWFLAKE_ROLE": "ANALYST_READ_ONLY",
+        "SNOWFLAKE_WAREHOUSE": "AGENT_XS"
+      }
+    }
+  }
+}

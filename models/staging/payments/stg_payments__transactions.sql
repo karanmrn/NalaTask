@@ -2,18 +2,19 @@
 with source as (
     {{ cdc_current_rows(source('payments', 'transactions_transaction')) }}
 )
+
 select
     cast(id as varchar) as transaction_id,
     cast(user_id as varchar) as user_id,
     cast(account_id as varchar) as account_id,
     cast(type as varchar) as transaction_type,
     cast(state as varchar) as transaction_state,
-    cast(sent_amount as decimal(38,8)) as sent_amount,
+    cast(sent_amount as decimal(38, 8)) as sent_amount,
     cast(sent_currency as varchar) as sent_currency,
-    cast(received_amount as decimal(38,8)) as received_amount,
+    cast(received_amount as decimal(38, 8)) as received_amount,
     cast(received_currency as varchar) as received_currency,
-    cast(exchange_rate as decimal(38,12)) as exchange_rate,
-    cast(source_amount as decimal(38,8)) as source_amount,
+    cast(exchange_rate as decimal(38, 12)) as exchange_rate,
+    cast(source_amount as decimal(38, 8)) as source_amount,
     cast(recipient_id as varchar) as recipient_id,
     cast(recipient_account_id as varchar) as recipient_account_id,
     cast(workflow_id as varchar) as workflow_id,

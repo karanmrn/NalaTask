@@ -1,8 +1,8 @@
 version: 2
 models:
 - name: stg_payments__users
-  description: One row per source users record. Typed current state; no financial filters or hidden deduplication.
-    Restricted staging retains source-sensitive fields.
+  description: 'One row per source users record. Typed current state after CDC log dedupe (latest _cdc_lsn wins,
+    deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -52,12 +52,15 @@ models:
     description: URL to the user's profile image. Null if not set.
     data_type: varchar
   - name: usage
-    description: Object containing user usage preferences. Contains `sender_country` and `recipient_countries`
-      keys.
+    description: Object containing user usage preferences. Contains `sender_country` and `recipient_countries` keys.
     data_type: variant
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_payments__accounts
-  description: One row per source users_account record. Typed current state; no financial filters or hidden
-    deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source users_account record. Typed current state after CDC log dedupe (latest _cdc_lsn
+    wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -124,9 +127,13 @@ models:
   - name: deleted_at
     description: Timestamp when the account was soft-deleted by the application. Null if the account is active.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_payments__transactions
-  description: One row per source transactions_transaction record. Typed current state; no financial filters
-    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source transactions_transaction record. Typed current state after CDC log dedupe (latest
+    _cdc_lsn wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -183,8 +190,8 @@ models:
   - name: transaction_state
     description: 'Current transaction state. Values: `CREATED`, `COLLECTION_IN_PROGRESS`, `CONVERSION_IN_PROGRESS`,
       `DISBURSEMENT_IN_PROGRESS`, `WORKFLOW_IN_PROGRESS`, `WAITING_ON_WORKFLOW`, `WAITING_ON_RECIPIENT_APPROVAL`,
-      `ON_HOLD`, `PENDING_CAPTURE`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`, `REJECTED`, `REFUNDED`,
-      `REVERSED_TO_WALLET`, `VOIDED`.'
+      `ON_HOLD`, `PENDING_CAPTURE`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`, `REJECTED`, `REFUNDED`, `REVERSED_TO_WALLET`,
+      `VOIDED`.'
     data_type: varchar
     data_tests:
     - accepted_values:
@@ -209,30 +216,30 @@ models:
           - VOIDED
   - name: sent_amount
     description: The amount the sender sent, in `sent_currency`.
-    data_type: number(38,8)
+    data_type: decimal(38,8)
   - name: sent_currency
     description: ISO currency code of the sending currency (e.g. `GBP`, `USD`, `EUR`).
     data_type: varchar
   - name: received_amount
     description: The amount the recipient receives, in `received_currency`.
-    data_type: number(38,8)
+    data_type: decimal(38,8)
   - name: received_currency
     description: ISO currency code of the receiving currency (e.g. `KES`, `TZS`, `NGN`, `UGX`).
     data_type: varchar
   - name: exchange_rate
-    description: The exchange rate applied to this transaction (1 unit of sent_currency = exchange_rate units
-      of received_currency).
-    data_type: number(38,12)
+    description: The exchange rate applied to this transaction (1 unit of sent_currency = exchange_rate units of
+      received_currency).
+    data_type: decimal(38,12)
   - name: source_amount
     description: The original amount before fees, in the sending currency.
-    data_type: number(38,8)
+    data_type: decimal(38,8)
   - name: recipient_id
     description: Foreign key to `transactions_recipient.id`. The recipient of this transaction. Null for non-disbursement
       types.
     data_type: varchar
   - name: recipient_account_id
-    description: Foreign key to `transactions_recipient_account.id`. The specific payment destination. Null
-      for non-disbursement types.
+    description: Foreign key to `transactions_recipient_account.id`. The specific payment destination. Null for
+      non-disbursement types.
     data_type: varchar
   - name: workflow_id
     description: Foreign key to the approval workflow, if the transaction requires one. Null for most transactions.
@@ -264,8 +271,7 @@ models:
           - BILLS_PAYMENT
           - P2P_TRANSFER
   - name: from_wallet_id
-    description: Foreign key to `wallets.id`. The wallet the funds are collected from. Null for card-funded
-      transactions.
+    description: Foreign key to `wallets.id`. The wallet the funds are collected from. Null for card-funded transactions.
     data_type: varchar
   - name: to_wallet_id
     description: Foreign key to `wallets.id`. The wallet the funds are disbursed to. Null for bank/mobile money
@@ -284,9 +290,13 @@ models:
   - name: fee_kind
     description: Fee classification (e.g. `FIXED`, `PERCENTAGE`).
     data_type: varchar
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_payments__collections
-  description: One row per source transactions_collection record. Typed current state; no financial filters
-    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source transactions_collection record. Typed current state after CDC log dedupe (latest
+    _cdc_lsn wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -334,7 +344,7 @@ models:
           - VOIDED
   - name: amount
     description: The amount being collected.
-    data_type: number(38,8)
+    data_type: decimal(38,8)
   - name: currency
     description: ISO currency code of the collection amount.
     data_type: varchar
@@ -347,9 +357,13 @@ models:
   - name: updated_at
     description: Timestamp of the most recent state change.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_payments__disbursements
-  description: One row per source transactions_disbursement record. Typed current state; no financial filters
-    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source transactions_disbursement record. Typed current state after CDC log dedupe (latest
+    _cdc_lsn wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -391,7 +405,7 @@ models:
           - AMBIGUOUS
   - name: amount
     description: The amount being disbursed in the destination currency.
-    data_type: number(38,8)
+    data_type: decimal(38,8)
   - name: currency
     description: ISO currency code of the disbursement amount.
     data_type: varchar
@@ -410,9 +424,13 @@ models:
   - name: updated_at
     description: Timestamp of the most recent state change.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_payments__disbursement_attempts
-  description: One row per source disbursement_attempts record. Typed current state; no financial filters or
-    hidden deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source disbursement_attempts record. Typed current state after CDC log dedupe (latest
+    _cdc_lsn wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -437,8 +455,7 @@ models:
           to: ref('stg_payments__disbursements')
           field: disbursement_id
   - name: attempt_state
-    description: 'Attempt state. Values: `CREATED`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `REVERSED`,
-      `AMBIGUOUS`.'
+    description: 'Attempt state. Values: `CREATED`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `REVERSED`, `AMBIGUOUS`.'
     data_type: varchar
     data_tests:
     - accepted_values:
@@ -495,9 +512,13 @@ models:
   - name: psp_account_id
     description: The PSP (payment service provider) account used for routing.
     data_type: varchar
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_payments__recipients
-  description: One row per source transactions_recipient record. Typed current state; no financial filters
-    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source transactions_recipient record. Typed current state after CDC log dedupe (latest
+    _cdc_lsn wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -537,9 +558,13 @@ models:
   - name: updated_at
     description: Timestamp of the most recent update.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_payments__recipient_accounts
-  description: One row per source transactions_recipient_account record. Typed current state; no financial
-    filters or hidden deduplication. Restricted staging retains source-sensitive fields.
+  description: 'One row per source transactions_recipient_account record. Typed current state after CDC log dedupe
+    (latest _cdc_lsn wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -604,9 +629,13 @@ models:
   - name: updated_at
     description: Timestamp of the most recent update.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
 - name: stg_payments__tasks
-  description: One row per source tasks_task record. Typed current state; no financial filters or hidden deduplication.
-    Restricted staging retains source-sensitive fields.
+  description: 'One row per source tasks_task record. Typed current state after CDC log dedupe (latest _cdc_lsn
+    wins, deletes removed). Restricted: retains source-sensitive fields.'
   config:
     meta:
       owner: data-engineering
@@ -664,12 +693,12 @@ models:
     description: The staff member currently assigned to the task. Null if unassigned.
     data_type: varchar
   - name: associated_ids
-    description: Array of entity IDs related to the task. Index 0 is typically the primary entity (user_id
-      or transaction_id). Index 2 (when present) is the user_id for transaction tasks.
+    description: Array of entity IDs related to the task. Index 0 is typically the primary entity (user_id or transaction_id).
+      Index 2 (when present) is the user_id for transaction tasks.
     data_type: variant
   - name: content
-    description: Task content and context. Contains keys like `disbursement_id`, `account_id`, `provider_name`
-      depending on the task type.
+    description: Task content and context. Contains keys like `disbursement_id`, `account_id`, `provider_name` depending
+      on the task type.
     data_type: variant
   - name: created_at
     description: Timestamp when the task was created.
@@ -687,3 +716,7 @@ models:
           - APPROVED
           - REJECTED
           - ESCALATED
+  - name: _loaded_at
+    description: Connector load timestamp (StreamServe _cdc_loaded_at or Fivetran _fivetran_synced). Freshness and
+      lag diagnostics.
+    data_type: timestamp_ntz
