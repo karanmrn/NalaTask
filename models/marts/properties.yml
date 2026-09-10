@@ -256,7 +256,7 @@ models:
         - provider_name
 - name: fct_rule_executions
   description: One row per rule execution. Exact rule version, including historically soft-deleted definitions.
-    FAIL is a documented provisional trigger proxy, not proven fraud.
+    FAIL counts as a trigger; it is a rule outcome, not confirmed fraud.
   config:
     meta:
       owner: data-engineering

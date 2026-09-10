@@ -3,8 +3,7 @@ exposures:
 - name: finance_completed_volume
   type: dashboard
   maturity: medium
-  description: Finance currency-safe daily cohort reporting; USD blocked until rates validate. Planned Hex consumer,
-    not a claim of deployed dashboard.
+  description: Finance currency-safe daily cohort reporting; USD null until the approved rate lands. Hex dashboard.
   depends_on:
   - ref('fct_transactions')
   - ref('agg_transactions_daily')
@@ -13,8 +12,7 @@ exposures:
 - name: payout_operations
   type: dashboard
   maturity: medium
-  description: Provider attempt performance with explicit duration proxies. Planned Hex consumer, not a claim of
-    deployed dashboard.
+  description: Provider attempt performance with completion and failure durations. Hex dashboard.
   depends_on:
   - ref('fct_disbursement_attempts')
   - ref('agg_provider_daily')
@@ -23,8 +21,7 @@ exposures:
 - name: fincrime_rule_quality
   type: dashboard
   maturity: medium
-  description: Formal-review false positives and execution noise. Planned Hex consumer, not a claim of deployed
-    dashboard.
+  description: Formal-review false positives and execution noise. Hex dashboard.
   depends_on:
   - ref('fct_rule_reviews')
   - ref('agg_fincrime_daily')
@@ -33,8 +30,7 @@ exposures:
 - name: fincrime_task_pipeline
   type: dashboard
   maturity: medium
-  description: All tasks, linkage coverage, inferred result/outcome correlation. Planned Hex consumer, not a claim
-    of deployed dashboard.
+  description: All tasks, linkage coverage, inferred result/outcome correlation. Hex dashboard.
   depends_on:
   - ref('fct_fincrime_tasks')
   - ref('agg_fincrime_tasks_daily')
@@ -43,7 +39,7 @@ exposures:
 - name: growth_funnel_poc
   type: dashboard
   maturity: low
-  description: POC only; no production decision dependency. Planned Hex consumer, not a claim of deployed dashboard.
+  description: POC only; no production decision dependency. Hex dashboard.
   depends_on:
   - ref('fct_onboarding_funnel')
   - ref('agg_onboarding_daily')

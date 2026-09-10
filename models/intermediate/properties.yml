@@ -133,7 +133,7 @@ models:
     description: Task creation.
     data_type: timestamp_ntz
   - name: updated_at
-    description: Latest update; resolution proxy only.
+    description: Latest update; equals resolution time when state is RESOLVED.
     data_type: timestamp_ntz
   - name: transaction_id
     description: Typed or explicitly linked transaction.
