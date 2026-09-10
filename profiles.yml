@@ -1,0 +1,25 @@
+# Two targets, one project.
+#   dev  : local DuckDB. Synthetic seeds stand in for RAW. Zero credentials. `uv run dbt build`.
+#   prod : Snowflake. Every value comes from the environment; nothing secret lives in the repo.
+nala_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: target/nala.duckdb
+      schema: analytics
+      threads: 4
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT', 'unset') }}"
+      user: "{{ env_var('SNOWFLAKE_USER', 'unset') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORMER') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ANALYTICS') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'TRANSFORMING') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'analytics') }}"
+      threads: 8
+      client_session_keep_alive: false
+      query_tag: nala_dbt
+      session_parameters:
+        TIMEZONE: UTC

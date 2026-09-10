@@ -3,11 +3,9 @@ logs/
 dbt_packages/
 .venv/
 __pycache__/
-.pytest_cache/
-profiles.yml
 .env
 *.pem
 *.p8
-artifacts/
-state/
-demo_outputs/
+*.duckdb
+*.duckdb.wal
+.lavish/
