@@ -1,0 +1,36 @@
+version: 2
+# Synthetic RAW landing tables (DuckDB dev only). Column docs live in models/sources.yml.
+# Explicit types where CSV inference guesses wrong (large ints, phone numbers, JSON text).
+seeds:
+  - name: users
+    config: {column_types: {source: varchar, client_properties: varchar, usage: varchar, used_invitation_code_id: varchar, profile_picture: varchar, _cdc_lsn: bigint}}
+  - name: users_account
+    config: {column_types: {features: varchar, client_properties: varchar, deleted: timestamp, _cdc_lsn: bigint}}
+  - name: transactions_transaction
+    config: {column_types: {summary: varchar, metadata: varchar, memo: varchar, workflow_id: varchar, from_wallet_id: varchar, to_wallet_id: varchar, recipient_id: varchar, recipient_account_id: varchar, sent_amount: 'decimal(38,8)', received_amount: 'decimal(38,8)', source_amount: 'decimal(38,8)', exchange_rate: 'decimal(38,12)', _cdc_lsn: bigint}}
+  - name: transactions_collection
+    config: {column_types: {amount: 'decimal(38,8)', _cdc_lsn: bigint}}
+  - name: transactions_disbursement
+    config: {column_types: {amount: 'decimal(38,8)', _cdc_lsn: bigint}}
+  - name: disbursement_attempts
+    config: {column_types: {provider_id: varchar, provider_error_category: varchar, error: varchar, provider_error: varchar, receipt_number: varchar, _cdc_lsn: bigint}}
+  - name: transactions_recipient
+    config: {column_types: {_cdc_lsn: bigint}}
+  - name: transactions_recipient_account
+    config: {column_types: {phone_number: varchar, operator: varchar, account_number: varchar, bank_code: varchar, bank_name: varchar, _cdc_lsn: bigint}}
+  - name: tasks_task
+    config: {column_types: {staff_id: varchar, assignee_id: varchar, associated_ids: varchar, content: varchar, resolution: varchar, _cdc_lsn: bigint}}
+  - name: rules
+    config: {column_types: {deleted_at: timestamp, _cdc_lsn: bigint}}
+  - name: workflows
+    config: {column_types: {config: varchar, deleted_at: timestamp, _cdc_lsn: bigint}}
+  - name: workflow_executions
+    config: {column_types: {context: varchar, actions: varchar, error: varchar, _cdc_lsn: bigint}}
+  - name: rule_executions
+    config: {column_types: {context: varchar, error: varchar, review: varchar, review_comment: varchar, reviewer_id: varchar, reviewed_at: timestamp, _cdc_lsn: bigint}}
+  - name: rule_execution_reviews
+    config: {column_types: {_cdc_lsn: bigint}}
+  - name: events
+    config: {column_types: {user_id: varchar, event_properties: varchar, user_properties: varchar, session_id: bigint}}
+  - name: daily_fx_rates
+    config: {column_types: {usd_per_unit: 'decimal(38,12)'}}

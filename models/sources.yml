@@ -3,14 +3,15 @@ sources:
 - name: payments
   description: Source 1 from the assessment. Current-row PostgreSQL replica via StreamServe; connector metadata
     contract is not supplied.
-  database: '{{ var(''raw_database'', ''RAW'') }}'
+  database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
   schema: '{{ var(''payments_raw_schema'', ''PAYMENTS'') }}'
+  loaded_at_field: _cdc_loaded_at
+  freshness:
+    warn_after: {count: 15, period: minute}
+    error_after: {count: 2, period: hour}
   config:
-    freshness: null
     meta:
-      connector: StreamServe
-      loaded_at_contract: Not supplied. Use connector sync/CDC checkpoints; do not substitute business event
-        timestamps.
+      connector: StreamServe CDC (near-real-time change log)
   tables:
   - name: users
     description: The primary user table. One row per registered user.
@@ -20,7 +21,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: status
       description: 'Current account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`, `PENDING`.'
       data_type: string
@@ -50,6 +50,15 @@ sources:
       description: Object containing user usage preferences. Contains `sender_country` and `recipient_countries`
         keys.
       data_type: json
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: users_account
     description: Account records. Each user has one or more accounts (e.g. personal account, business account).
       An account is the entity that owns transactions.
@@ -59,7 +68,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: owner_id
       description: Foreign key to `users.id`. The user who owns this account.
       data_type: uuid
@@ -93,6 +101,15 @@ sources:
     - name: deleted
       description: Timestamp when the account was soft-deleted by the application. Null if the account is active.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: transactions_transaction
     description: The core transaction table. One row per transaction initiated by a user. A transaction represents
       a cross-border money transfer.
@@ -102,7 +119,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: user_id
       description: Foreign key to `users.id`. The user who initiated the transaction.
       data_type: uuid
@@ -187,6 +203,15 @@ sources:
     - name: fee_kind
       description: Fee classification (e.g. `FIXED`, `PERCENTAGE`).
       data_type: string
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: transactions_collection
     description: Collection records. Each transaction with a collection leg (types containing `COLLECTION`)
       has one collection record, representing the inbound money movement — how funds are collected from the
@@ -197,7 +222,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: transaction_id
       description: Foreign key to `transactions_transaction.id`.
       data_type: uuid
@@ -223,6 +247,15 @@ sources:
     - name: updated_at
       description: Timestamp of the most recent state change.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: transactions_disbursement
     description: Disbursement records. Each transaction with a disbursement leg (types containing `DISBURSEMENT`)
       has one disbursement, which represents the payout leg of the money transfer. The disbursement is routed
@@ -233,7 +266,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: transaction_id
       description: Foreign key to `transactions_transaction.id`.
       data_type: uuid
@@ -262,6 +294,15 @@ sources:
     - name: updated_at
       description: Timestamp of the most recent state change.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: disbursement_attempts
     description: Individual payout attempts. A single disbursement may have multiple attempts if the first
       provider fails and the system retries with a different provider.
@@ -271,7 +312,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: disbursement_id
       description: Foreign key to `transactions_disbursement.id`.
       data_type: uuid
@@ -316,6 +356,15 @@ sources:
     - name: psp_account_id
       description: The PSP (payment service provider) account used for routing.
       data_type: uuid
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: transactions_recipient
     description: Recipient records. A recipient is a person or business that receives money from a NALA user.
       Recipients belong to an account and can have one or more recipient accounts (payment destinations).
@@ -325,7 +374,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: account_id
       description: Foreign key to `users_account.id`. The account that created this recipient.
       data_type: uuid
@@ -344,6 +392,15 @@ sources:
     - name: updated_at
       description: Timestamp of the most recent update.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: transactions_recipient_account
     description: Recipient account records. Each recipient has one or more payment destinations — the specific
       account, phone number, or address where money is delivered.
@@ -353,7 +410,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: recipient_id
       description: Foreign key to `transactions_recipient.id`.
       data_type: uuid
@@ -388,6 +444,15 @@ sources:
     - name: updated_at
       description: Timestamp of the most recent update.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: tasks_task
     description: Operational tasks created by various services (fincrime, compliance, customer support). Tasks
       are assigned to staff for review and resolution.
@@ -397,7 +462,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: service
       description: 'The service that created the task. Values: `fincrime`, `compliance`, `support`.'
       data_type: string
@@ -433,17 +497,27 @@ sources:
     - name: resolution
       description: 'Resolution outcome. Values: `APPROVED`, `REJECTED`, `ESCALATED`. Null while open.'
       data_type: string
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
 - name: fincrime
   description: Source 2 from the assessment. Current-row PostgreSQL replica via StreamServe; connector metadata
     contract is not supplied.
-  database: '{{ var(''raw_database'', ''RAW'') }}'
+  database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
   schema: '{{ var(''fincrime_raw_schema'', ''FINCRIME'') }}'
+  loaded_at_field: _cdc_loaded_at
+  freshness:
+    warn_after: {count: 15, period: minute}
+    error_after: {count: 2, period: hour}
   config:
-    freshness: null
     meta:
-      connector: StreamServe
-      loaded_at_contract: Not supplied. Use connector sync/CDC checkpoints; do not substitute business event
-        timestamps.
+      connector: StreamServe CDC (near-real-time change log)
   tables:
   - name: rules
     description: Rule definitions. Each row is a version of a rule.
@@ -453,7 +527,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: name
       description: Machine-readable rule name (e.g. `high_value_transaction_check`).
       data_type: string
@@ -487,6 +560,15 @@ sources:
     - name: deleted_at
       description: Timestamp when this rule version was soft-deleted. Null if active.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: workflows
     description: Workflow definitions. Each workflow is an ordered collection of rules.
     columns:
@@ -495,7 +577,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: name
       description: Machine-readable workflow name.
       data_type: string
@@ -521,6 +602,15 @@ sources:
     - name: deleted_at
       description: Timestamp when this workflow version was soft-deleted. Null if active.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: workflow_executions
     description: Each row represents one execution of a workflow, triggered by a business event. The `context`
       column carries the reference back to the entity being evaluated.
@@ -530,7 +620,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: workflow_id
       description: Foreign key to `workflows.id`. The workflow that was executed.
       data_type: uuid
@@ -557,6 +646,15 @@ sources:
     - name: actions
       description: Array of actions triggered by this execution (e.g. `BLOCK_USER`, `HOLD_TRANSACTION`, `CREATE_TASK`).
       data_type: json
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: rule_executions
     description: Each row represents the evaluation of a single rule within a workflow execution.
     columns:
@@ -565,7 +663,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: rule_id
       description: Foreign key to `rules.id`. The rule that was evaluated.
       data_type: uuid
@@ -606,6 +703,15 @@ sources:
     - name: reviewed_at
       description: Timestamp when the review was completed. Null if not reviewed.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
   - name: rule_execution_reviews
     description: Dedicated review records for rule executions that required manual assessment. This is separate
       from the inline review fields on `rule_executions` and represents the formal ops review process.
@@ -615,7 +721,6 @@ sources:
       data_type: uuid
       data_tests:
       - not_null
-      - unique
     - name: rule_execution_id
       description: Foreign key to `rule_executions.id`.
       data_type: uuid
@@ -631,16 +736,26 @@ sources:
     - name: reviewed_at
       description: Timestamp when the review was completed.
       data_type: timestamp
+    - name: _cdc_operation
+      description: StreamServe change type for this log row. Values INSERT, UPDATE, DELETE. Assumed connector metadata.
+      data_type: string
+    - name: _cdc_lsn
+      description: Postgres log sequence number of the change. Orders versions of one key. Assumed connector metadata.
+      data_type: bigint
+    - name: _cdc_loaded_at
+      description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
+      data_type: timestamp
 - name: amplitude
   description: Source 3 from the assessment. Amplitude via daily Fivetran sync around 06:00 UTC; exploratory.
-  database: '{{ var(''raw_database'', ''RAW'') }}'
+  database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
   schema: '{{ var(''amplitude_raw_schema'', ''AMPLITUDE'') }}'
+  loaded_at_field: _fivetran_synced
+  freshness:
+    warn_after: {count: 26, period: hour}
+    error_after: {count: 30, period: hour}
   config:
-    freshness: null
     meta:
-      connector: Fivetran
-      loaded_at_contract: Not supplied. Use connector sync/CDC checkpoints; do not substitute business event
-        timestamps.
+      connector: Fivetran daily batch (~06:00 UTC)
   tables:
   - name: events
     description: One row per event tracked in the NALA mobile app.
@@ -693,10 +808,13 @@ sources:
     - name: server_upload_time
       description: Timestamp when Amplitude's servers received the event.
       data_type: timestamp
+    - name: _fivetran_synced
+      description: Fivetran sync timestamp. Standard Fivetran metadata column; freshness anchor.
+      data_type: timestamp
 - name: reference_data
   description: 'REQUIRED ADDITIONAL INPUT, not provided in the brief: Finance-approved daily USD conversion
     rates.'
-  database: '{{ var(''raw_database'', ''RAW'') }}'
+  database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
   schema: '{{ var(''reference_raw_schema'', ''REFERENCE'') }}'
   config:
     freshness: null

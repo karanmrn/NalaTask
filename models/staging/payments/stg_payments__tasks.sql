@@ -1,4 +1,7 @@
--- Current-row source contract; do not silently deduplicate conflicting CDC rows.
+-- StreamServe CDC log collapsed to one current row per key; deletes removed. See macros/cdc.sql.
+with source as (
+    {{ cdc_current_rows(source('payments', 'tasks_task')) }}
+)
 select
     cast(id as varchar) as task_id,
     cast(service as varchar) as service,
@@ -9,7 +12,8 @@ select
     cast(assignee_id as varchar) as assignee_id,
     {{ as_variant('associated_ids') }} as associated_ids,
     {{ as_variant('content') }} as content,
-    cast(created_at as timestamp_ntz) as created_at,
-    cast(last_updated_at as timestamp_ntz) as updated_at,
-    cast(resolution as varchar) as resolution
-from {{ source('payments', 'tasks_task') }}
+    cast(created_at as {{ dbt.type_timestamp() }}) as created_at,
+    cast(last_updated_at as {{ dbt.type_timestamp() }}) as updated_at,
+    cast(resolution as varchar) as resolution,
+    cast(_cdc_loaded_at as {{ dbt.type_timestamp() }}) as _loaded_at
+from source

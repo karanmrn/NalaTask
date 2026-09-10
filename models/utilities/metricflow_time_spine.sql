@@ -1,2 +1,2 @@
-select dateadd('day', row_number() over (order by seq4()) - 1, '2020-01-01'::date)::date as date_day
-from table(generator(rowcount => 7305))
+-- Daily calendar for MetricFlow. 20 years from 2020-01-01.
+{{ day_spine('2020-01-01', 7305) }}

@@ -168,10 +168,10 @@ semantic_models:
     description: execution_count
     agg: sum
     expr: execution_count
-  - name: rule_triggers_proxy_measure
-    description: trigger_count_proxy
+  - name: rule_triggers_measure
+    description: trigger_count
     agg: sum
-    expr: trigger_count_proxy
+    expr: trigger_count
 - name: fincrime_tasks
   description: Optional production building blocks. Inferred linkage is not causal certainty; all unlinked tasks
     remain in totals.

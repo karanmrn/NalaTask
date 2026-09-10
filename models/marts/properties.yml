@@ -179,10 +179,10 @@ models:
   - name: failed_attempt_count
     description: Count only FAILED; not a complement of success.
     data_type: number(38,0)
-  - name: completion_seconds_proxy
+  - name: completion_seconds
     description: Creation to last update for currently completed attempts; null otherwise.
     data_type: number(38,6)
-  - name: failure_seconds_proxy
+  - name: failure_seconds
     description: Creation to last update for currently failed attempts; null otherwise.
     data_type: number(38,6)
   - name: completion_time_band
@@ -216,10 +216,10 @@ models:
   - name: provider_success_rate
     description: Completed/all attempts; pending remain in denominator.
     data_type: float
-  - name: avg_completion_seconds_proxy
+  - name: avg_completion_seconds
     description: Mean among available currently completed durations.
     data_type: number(38,6)
-  - name: avg_failure_seconds_proxy
+  - name: avg_failure_seconds
     description: Mean among available currently failed durations.
     data_type: number(38,6)
   - name: under_1_min
@@ -304,7 +304,7 @@ models:
   - name: execution_count
     description: Denominator for volume and trigger proxy.
     data_type: number(38,0)
-  - name: trigger_count_proxy
+  - name: trigger_count
     description: 1 for FAIL; validate alert semantics before ranking noise.
     data_type: number(38,0)
 - name: fct_rule_reviews
@@ -393,10 +393,10 @@ models:
   - name: executions
     description: Executions created that day.
     data_type: number(38,0)
-  - name: triggers_proxy
+  - name: triggers
     description: FAIL results created that day.
     data_type: number(38,0)
-  - name: trigger_rate_proxy
+  - name: trigger_rate
     description: FAIL/all executions; provisional trigger semantics.
     data_type: float
   - name: reviews
@@ -475,7 +475,7 @@ models:
   - name: resolved_task_count
     description: 1 only when RESOLVED; cancelled is not resolved.
     data_type: number(38,0)
-  - name: resolution_seconds_proxy
+  - name: resolution_seconds
     description: Created to latest update for resolved tasks only.
     data_type: number(38,6)
 - name: agg_fincrime_tasks_daily
@@ -509,7 +509,7 @@ models:
   - name: resolved_proportion
     description: Resolved/all tasks; not average of sub-group rates.
     data_type: float
-  - name: avg_resolution_seconds_proxy
+  - name: avg_resolution_seconds
     description: Mean for currently resolved tasks with valid update timestamp.
     data_type: number(38,6)
   data_tests:

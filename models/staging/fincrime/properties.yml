@@ -231,7 +231,7 @@ models:
   - name: reviewed_at
     description: Timestamp when the review was completed. Null if not reviewed.
     data_type: timestamp_ntz
-- name: stg_fincrime__reviews
+- name: stg_fincrime__rule_execution_reviews
   description: One row per source rule_execution_reviews record. Typed current state; no financial filters
     or hidden deduplication. Restricted staging retains source-sensitive fields.
   config:

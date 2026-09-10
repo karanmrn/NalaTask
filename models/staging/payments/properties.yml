@@ -410,7 +410,7 @@ models:
   - name: updated_at
     description: Timestamp of the most recent state change.
     data_type: timestamp_ntz
-- name: stg_payments__attempts
+- name: stg_payments__disbursement_attempts
   description: One row per source disbursement_attempts record. Typed current state; no financial filters or
     hidden deduplication. Restricted staging retains source-sensitive fields.
   config:

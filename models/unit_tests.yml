@@ -4,7 +4,7 @@ unit_tests:
   description: Never collapse multiple formal reviews into the last record or drop inconclusive from the denominator.
   model: fct_rule_reviews
   given:
-  - input: ref('stg_fincrime__reviews')
+  - input: ref('stg_fincrime__rule_execution_reviews')
     rows:
     - review_id: v1
       rule_execution_id: e1
@@ -113,21 +113,21 @@ unit_tests:
       attempt_count: 1
       completed_attempt_count: 1
       failed_attempt_count: 0
-      completion_seconds_proxy: 30
-      failure_seconds_proxy: null
+      completion_seconds: 30
+      failure_seconds: null
       completion_time_band: UNDER_1_MIN
     - attempt_date: '2026-09-01'
       provider_name: P
       attempt_count: 1
       completed_attempt_count: 0
       failed_attempt_count: 0
-      completion_seconds_proxy: null
-      failure_seconds_proxy: null
+      completion_seconds: null
+      failure_seconds: null
       completion_time_band: UNKNOWN
   expect:
     rows:
     - attempts: 2
       completed_attempts: 1
       provider_success_rate: 0.5
-      avg_completion_seconds_proxy: 30
+      avg_completion_seconds: 30
       under_1_min: 1

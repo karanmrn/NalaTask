@@ -1,6 +1,6 @@
 with e as (
     select execution_date as activity_date, rule_id, rule_name, rule_category, rule_version,
-           sum(execution_count) as executions, sum(trigger_count_proxy) as triggers_proxy
+           sum(execution_count) as executions, sum(trigger_count) as triggers
     from {{ ref('fct_rule_executions') }}
     group by execution_date, rule_id, rule_name, rule_category, rule_version
 ), r as (
@@ -13,8 +13,8 @@ with e as (
     select activity_date, rule_id from e union select activity_date, rule_id from r
 )
 select k.activity_date, k.rule_id, d.rule_name, d.rule_category, d.rule_version,
-    coalesce(e.executions, 0) as executions, coalesce(e.triggers_proxy, 0) as triggers_proxy,
-    {{ safe_ratio('e.triggers_proxy', 'e.executions') }} as trigger_rate_proxy,
+    coalesce(e.executions, 0) as executions, coalesce(e.triggers, 0) as triggers,
+    {{ safe_ratio('e.triggers', 'e.executions') }} as trigger_rate,
     coalesce(r.reviews, 0) as reviews, coalesce(r.false_positives, 0) as false_positives,
     {{ safe_ratio('r.false_positives', 'r.reviews') }} as false_positive_rate,
     r.avg_review_seconds

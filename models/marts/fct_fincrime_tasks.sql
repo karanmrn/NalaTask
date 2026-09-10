@@ -17,7 +17,7 @@ select t.task_id, t.task_type, t.task_state, t.resolution, t.created_at, t.updat
     1 as task_count,
     case when t.task_state = 'RESOLVED' then 1 else 0 end as resolved_task_count,
     case when t.task_state = 'RESOLVED' and t.updated_at >= t.created_at
-         then datediff('millisecond', t.created_at, t.updated_at) / 1000.0 end as resolution_seconds_proxy
+         then datediff('millisecond', t.created_at, t.updated_at) / 1000.0 end as resolution_seconds
 from {{ ref('int_fincrime_task_context') }} t
 left join matches m on t.task_id = m.task_id
 left join {{ ref('int_workflow_context') }} w on m.inferred_workflow_execution_id = w.workflow_execution_id

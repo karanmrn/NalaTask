@@ -1,4 +1,7 @@
--- Current-row source contract; do not silently deduplicate conflicting CDC rows.
+-- StreamServe CDC log collapsed to one current row per key; deletes removed. See macros/cdc.sql.
+with source as (
+    {{ cdc_current_rows(source('payments', 'transactions_recipient_account')) }}
+)
 select
     cast(id as varchar) as recipient_account_id,
     cast(recipient_id as varchar) as recipient_id,
@@ -10,6 +13,7 @@ select
     cast(account_number as varchar) as account_number,
     cast(bank_code as varchar) as bank_code,
     cast(bank_name as varchar) as bank_name,
-    cast(created_at as timestamp_ntz) as created_at,
-    cast(updated_at as timestamp_ntz) as updated_at
-from {{ source('payments', 'transactions_recipient_account') }}
+    cast(created_at as {{ dbt.type_timestamp() }}) as created_at,
+    cast(updated_at as {{ dbt.type_timestamp() }}) as updated_at,
+    cast(_cdc_loaded_at as {{ dbt.type_timestamp() }}) as _loaded_at
+from source
