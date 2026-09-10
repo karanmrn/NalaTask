@@ -1,8 +1,0 @@
-{
-  "agg_transactions_daily": 5,
-  "agg_provider_daily": 2,
-  "agg_fincrime_daily": 3,
-  "fct_fincrime_tasks": 5,
-  "fct_onboarding_funnel": 4,
-  "agg_onboarding_daily": 3
-}
