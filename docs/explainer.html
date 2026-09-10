@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en" data-theme="luxury">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NALA assessment: how it was thought through and built</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :where(.grid, .flex) > * { min-width: 0; }
+  :where(p, h1, h2, h3, h4, li, td, th, .badge) { overflow-wrap: anywhere; }
+  :where(img, svg) { max-width: 100%; height: auto; }
+  svg text { font-family: ui-sans-serif, system-ui, sans-serif; }
+  .fig { color: var(--color-base-content); }
+  .fig .node { fill: var(--color-base-200); stroke: currentColor; stroke-width: 1.2; }
+  .fig .node.hi { fill: var(--color-primary); stroke: var(--color-primary); }
+  .fig .node.warn { fill: var(--color-warning); stroke: var(--color-warning); }
+  .fig .lbl { fill: currentColor; font-size: 12px; }
+  .fig .lbl.on { fill: var(--color-primary-content); font-size: 12px; }
+  .fig .lbl.onw { fill: var(--color-warning-content); font-size: 12px; }
+  .fig .sub { fill: currentColor; opacity: .7; font-size: 10.5px; }
+  .fig .edge { stroke: currentColor; stroke-width: 1.3; fill: none; opacity: .75; }
+  .fig .edge.dash { stroke-dasharray: 5 4; }
+  code { font-size: .9em; }
+</style>
+</head>
+<body class="bg-base-100 text-base-content">
+<div class="max-w-6xl mx-auto px-6 py-10 space-y-16">
+
+<header class="space-y-4">
+  <div class="badge badge-primary badge-lg">NALA Senior Analytics Engineer assessment</div>
+  <h1 class="text-4xl font-bold leading-tight">From brief to green build: how this project was thought through</h1>
+  <p class="text-lg opacity-80">A teaching surface for Karan and a record of the end-to-end AI workflow. Every claim below maps to a file in <code>~/Documents/projects/NalaTask</code> and was executed with <code>make build</code> on DuckDB.</p>
+  <div class="stats stats-vertical sm:stats-horizontal shadow bg-base-200 w-full">
+    <div class="stat"><div class="stat-title">Models</div><div class="stat-value text-primary">37</div><div class="stat-desc">16 staging, 4 intermediate, 13 marts, 3 exploratory, 1 spine</div></div>
+    <div class="stat"><div class="stat-title">Tests passing</div><div class="stat-value text-primary">201</div><div class="stat-desc">158 data tests, 4 unit tests, snapshot, seeds</div></div>
+    <div class="stat"><div class="stat-title">Metrics queried</div><div class="stat-value text-primary">5 / 5</div><div class="stat-desc">MetricFlow validated against the warehouse</div></div>
+    <div class="stat"><div class="stat-title">Credentials needed</div><div class="stat-value text-primary">0</div><div class="stat-desc">DuckDB dev target, Snowflake prod target</div></div>
+  </div>
+</header>
+
+<!-- 1 BRIEF -->
+<section id="brief" class="space-y-6">
+  <h2 class="text-2xl font-bold">1. The brief, decoded</h2>
+  <p>NALA moves money from UK/US/EU to Africa and Asia. Three systems land in Snowflake <code>RAW</code>. The job: a dbt layer that finance, ops, fincrime and growth can trust, plus a semantic layer so Hex reads metrics instead of tables.</p>
+  <div class="grid md:grid-cols-3 gap-4">
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">Source 1: Payments backend</h3><p>Postgres, StreamServe CDC, near-real-time. 9 tables. <b>15M transactions, 20M payout attempts.</b> Users, accounts, transactions, collections, disbursements, attempts, recipients, recipient accounts, ops tasks.</p></div></div>
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">Source 2: Fincrime service</h3><p>Postgres, StreamServe CDC. 5 tables. <b>30M rule executions.</b> Rules (versioned), workflows, workflow executions, rule executions, formal reviews. Triggers tasks in Source 1.</p></div></div>
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">Source 3: Amplitude</h3><p>Fivetran daily batch ~06:00 UTC. 1 table, <b>100M events.</b> Exploratory only: onboarding funnel for growth.</p></div></div>
+  </div>
+  <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-200">
+    <table class="table table-sm">
+      <thead><tr><th>#</th><th>Requirement</th><th>Team</th><th>The hard part</th><th>Delivered by</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Daily completed volume by corridor, local + USD</td><td>Finance</td><td>Which types are "real outbound"? No USD rate supplied. No completed_at.</td><td><code>fct_transactions</code>, <code>agg_finance_volume_daily</code></td></tr>
+        <tr><td>2</td><td>Attempt success rate, time to complete/fail, 6 latency bands</td><td>Ops</td><td>Attempt grain, not transaction grain. Pending stays in the denominator.</td><td><code>fct_disbursement_attempts</code>, <code>agg_provider_daily</code></td></tr>
+        <tr><td>3</td><td>Rule volumes, false positive rate, execution-to-review time</td><td>Fincrime</td><td>Rule versions. Review day vs execution day. Repeat reviews.</td><td><code>fct_rule_executions</code>, <code>fct_rule_reviews</code>, <code>agg_fincrime_daily</code></td></tr>
+        <tr><td>4</td><td>Task pipeline: created, resolved, resolution time, outcome vs workflow result</td><td>Fincrime + backend</td><td>No foreign key between task and workflow execution. Positional JSON array.</td><td><code>fct_fincrime_tasks</code>, <code>agg_fincrime_tasks_daily</code></td></tr>
+        <tr><td>5</td><td>Signup started, completed, KYC, first transaction; conversion and time</td><td>Growth (exploratory)</td><td>Anonymous events. Which KYC step is final? 100M rows.</td><td><code>fct_onboarding_funnel</code>, <code>agg_onboarding_daily</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 2 DATA MODEL -->
+<section id="erd" class="space-y-6">
+  <h2 class="text-2xl font-bold">2. The data model, and where the three sources touch</h2>
+  <p>Every join in the project is one of the arrows below. The dashed ones are the cross-source joins the brief calls "enrichment"; none of them is a real foreign key.</p>
+  <svg class="fig w-full" viewBox="0 0 1000 400" role="img" aria-label="Entity relationship overview">
+    <title>Entity relationships across the three sources</title>
+    <rect x="10" y="10" width="560" height="380" rx="10" fill="none" stroke="currentColor" opacity=".25" />
+    <text x="24" y="32" class="sub">SOURCE 1 PAYMENTS</text>
+    <rect x="600" y="10" width="240" height="250" rx="10" fill="none" stroke="currentColor" opacity=".25" />
+    <text x="614" y="32" class="sub">SOURCE 2 FINCRIME</text>
+    <rect x="860" y="10" width="130" height="120" rx="10" fill="none" stroke="currentColor" opacity=".25" />
+    <text x="874" y="32" class="sub">SOURCE 3</text>
+
+    <g id="users"><rect class="node" x="30" y="50" width="120" height="40" rx="6" /><text class="lbl" x="90" y="74" text-anchor="middle">users</text></g>
+    <g id="accounts"><rect class="node" x="30" y="120" width="120" height="40" rx="6" /><text class="lbl" x="90" y="144" text-anchor="middle">users_account</text></g>
+    <g id="recipients"><rect class="node" x="30" y="220" width="120" height="40" rx="6" /><text class="lbl" x="90" y="244" text-anchor="middle">recipient</text></g>
+    <g id="recipient_accounts"><rect class="node" x="30" y="290" width="120" height="40" rx="6" /><text class="lbl" x="90" y="314" text-anchor="middle">recipient_account</text></g>
+    <g id="transactions"><rect class="node hi" x="220" y="120" width="150" height="40" rx="6" /><text class="lbl on" x="295" y="144" text-anchor="middle">transactions (15M)</text></g>
+    <g id="collections"><rect class="node" x="220" y="200" width="150" height="40" rx="6" /><text class="lbl" x="295" y="224" text-anchor="middle">collection (in)</text></g>
+    <g id="disbursements"><rect class="node" x="220" y="270" width="150" height="40" rx="6" /><text class="lbl" x="295" y="294" text-anchor="middle">disbursement (out)</text></g>
+    <g id="attempts"><rect class="node hi" x="220" y="340" width="150" height="40" rx="6" /><text class="lbl on" x="295" y="364" text-anchor="middle">attempts (20M)</text></g>
+    <g id="tasks"><rect class="node warn" x="420" y="120" width="130" height="40" rx="6" /><text class="lbl onw" x="485" y="144" text-anchor="middle">tasks_task</text></g>
+    <g id="workflows"><rect class="node" x="620" y="50" width="200" height="40" rx="6" /><text class="lbl" x="720" y="74" text-anchor="middle">workflows / rules (versioned)</text></g>
+    <g id="wexec"><rect class="node warn" x="620" y="120" width="200" height="40" rx="6" /><text class="lbl onw" x="720" y="144" text-anchor="middle">workflow_executions (10M)</text></g>
+    <g id="rexec"><rect class="node hi" x="620" y="190" width="200" height="40" rx="6" /><text class="lbl on" x="720" y="214" text-anchor="middle">rule_executions (30M)</text></g>
+    <g id="reviews"><rect class="node" x="620" y="250" width="200" height="40" rx="6" /><text class="lbl" x="720" y="274" text-anchor="middle">rule_execution_reviews</text></g>
+    <g id="events"><rect class="node" x="870" y="50" width="110" height="40" rx="6" /><text class="lbl" x="925" y="74" text-anchor="middle">events (100M)</text></g>
+
+    <path class="edge" d="M90,90 L90,120" />
+    <path class="edge" d="M150,140 L220,140" />
+    <path class="edge" d="M90,160 L90,220" />
+    <path class="edge" d="M90,260 L90,290" />
+    <path class="edge" d="M295,160 L295,200" />
+    <path class="edge" d="M295,240 L295,270" />
+    <path class="edge" d="M295,310 L295,340" />
+    <path class="edge" d="M150,310 L220,290" />
+    <path class="edge" d="M720,90 L720,120" />
+    <path class="edge" d="M720,160 L720,190" />
+    <path class="edge" d="M720,230 L720,250" />
+    <path class="edge dash" d="M370,140 L620,140" />
+    <text class="sub" x="495" y="110" text-anchor="middle">context.transaction_id / user_id (JSON)</text>
+    <path class="edge dash" d="M550,140 L620,140" />
+    <text class="sub" x="485" y="180" text-anchor="middle">associated_ids[0], [2]</text>
+    <text class="sub" x="485" y="195" text-anchor="middle">no workflow_execution_id</text>
+    <path class="edge dash" d="M870,70 C 700,20 300,20 150,60" />
+    <text class="sub" x="480" y="45" text-anchor="middle">events.user_id = users.id (null while anonymous)</text>
+  </svg>
+  <div class="alert alert-soft alert-info"><span><b>Read it like this:</b> money flows down the left column (transaction, then its collection leg, disbursement leg, and one or more provider attempts). Fincrime evaluates a transaction or user (dashed line into <code>workflow_executions.context</code>) and may create a task (dashed line back). Amplitude only knows the user id once the user has logged in.</span></div>
+</section>
+
+<!-- 3 GRAIN -->
+<section id="grain" class="space-y-6">
+  <h2 class="text-2xl font-bold">3. Grain first: the one idea that prevents double counting</h2>
+  <p>Grain means what one row represents. One transaction can have two attempts and three reviews. Join both and you get six rows for one amount. <code>DISTINCT</code> on the amount is not a fix: two different transactions can share an amount.</p>
+  <svg class="fig w-full" viewBox="0 0 1000 220" role="img" aria-label="Fan-out example">
+    <title>Fan-out from one transaction</title>
+    <g id="tx1"><rect class="node hi" x="20" y="80" width="170" height="50" rx="6" /><text class="lbl on" x="105" y="102" text-anchor="middle">transaction T</text><text class="lbl on" x="105" y="118" text-anchor="middle">GBP 100</text></g>
+    <g id="att"><rect class="node" x="300" y="30" width="150" height="40" rx="6" /><text class="lbl" x="375" y="54" text-anchor="middle">attempt A1 FAILED</text>
+                <rect class="node" x="300" y="80" width="150" height="40" rx="6" /><text class="lbl" x="375" y="104" text-anchor="middle">attempt A2 COMPLETED</text></g>
+    <g id="rev"><rect class="node" x="300" y="150" width="150" height="40" rx="6" /><text class="lbl" x="375" y="174" text-anchor="middle">3 formal reviews</text></g>
+    <path class="edge" d="M190,105 L300,50" /><path class="edge" d="M190,105 L300,100" /><path class="edge" d="M190,105 L300,170" />
+    <g id="bad"><rect class="node warn" x="560" y="30" width="190" height="60" rx="6" /><text class="lbl onw" x="655" y="52" text-anchor="middle">join everything</text><text class="lbl onw" x="655" y="70" text-anchor="middle">6 rows, GBP 600</text></g>
+    <g id="good"><rect class="node hi" x="560" y="130" width="420" height="60" rx="6" /><text class="lbl on" x="770" y="152" text-anchor="middle">one fact per grain: fct_transactions, fct_disbursement_attempts, fct_rule_reviews</text><text class="lbl on" x="770" y="170" text-anchor="middle">aggregate children first, then join at parent grain</text></g>
+    <path class="edge dash" d="M450,60 L560,60" /><path class="edge" d="M450,160 L560,160" />
+  </svg>
+  <div class="grid md:grid-cols-5 gap-3 text-sm">
+    <div class="card bg-base-200"><div class="card-body p-4"><b>transaction</b><span class="opacity-70">fct_transactions, volume and success rate</span></div></div>
+    <div class="card bg-base-200"><div class="card-body p-4"><b>attempt</b><span class="opacity-70">fct_disbursement_attempts, provider performance</span></div></div>
+    <div class="card bg-base-200"><div class="card-body p-4"><b>rule execution</b><span class="opacity-70">fct_rule_executions, volumes and triggers</span></div></div>
+    <div class="card bg-base-200"><div class="card-body p-4"><b>formal review</b><span class="opacity-70">fct_rule_reviews, false positive rate</span></div></div>
+    <div class="card bg-base-200"><div class="card-body p-4"><b>task</b><span class="opacity-70">fct_fincrime_tasks, pipeline</span></div></div>
+  </div>
+</section>
+
+<!-- 4 PIPELINE -->
+<section id="pipeline" class="space-y-6">
+  <h2 class="text-2xl font-bold">4. The pipeline: what each layer buys</h2>
+  <svg class="fig w-full" viewBox="0 0 1000 300" role="img" aria-label="Pipeline layers">
+    <title>Layers from RAW to Hex</title>
+    <g id="raw"><rect class="node" x="10" y="60" width="150" height="180" rx="8" /><text class="lbl" x="85" y="85" text-anchor="middle" font-weight="bold">RAW</text><text class="sub" x="85" y="110" text-anchor="middle">CDC change log</text><text class="sub" x="85" y="126" text-anchor="middle">many rows per key</text><text class="sub" x="85" y="142" text-anchor="middle">_cdc_lsn, _cdc_operation</text><text class="sub" x="85" y="170" text-anchor="middle">Fivetran daily</text><text class="sub" x="85" y="186" text-anchor="middle">_fivetran_synced</text></g>
+    <g id="stg"><rect class="node" x="200" y="60" width="150" height="180" rx="8" /><text class="lbl" x="275" y="85" text-anchor="middle" font-weight="bold">staging (views)</text><text class="sub" x="275" y="110" text-anchor="middle">one row per key</text><text class="sub" x="275" y="126" text-anchor="middle">deletes removed</text><text class="sub" x="275" y="142" text-anchor="middle">cast, rename</text><text class="sub" x="275" y="158" text-anchor="middle">JSON to variant</text><text class="sub" x="275" y="186" text-anchor="middle">unique, not_null,</text><text class="sub" x="275" y="202" text-anchor="middle">accepted_values, freshness</text></g>
+    <g id="int"><rect class="node" x="390" y="60" width="150" height="180" rx="8" /><text class="lbl" x="465" y="85" text-anchor="middle" font-weight="bold">intermediate</text><text class="sub" x="465" y="110" text-anchor="middle">type policy (seed)</text><text class="sub" x="465" y="126" text-anchor="middle">workflow context</text><text class="sub" x="465" y="142" text-anchor="middle">task candidates</text><text class="sub" x="465" y="170" text-anchor="middle">+ snapshot:</text><text class="sub" x="465" y="186" text-anchor="middle">state history</text></g>
+    <g id="marts"><rect class="node hi" x="580" y="60" width="180" height="180" rx="8" /><text class="lbl on" x="670" y="85" text-anchor="middle" font-weight="bold">marts</text><text class="lbl on" x="670" y="110" text-anchor="middle">fct_ (incremental)</text><text class="lbl on" x="670" y="126" text-anchor="middle">agg_ daily (table)</text><text class="lbl on" x="670" y="142" text-anchor="middle">dim_ (table)</text><text class="lbl on" x="670" y="170" text-anchor="middle">contracts on Snowflake</text><text class="lbl on" x="670" y="186" text-anchor="middle">reconciliation tests</text><text class="lbl on" x="670" y="202" text-anchor="middle">unit tests</text></g>
+    <g id="sem"><rect class="node" x="800" y="60" width="190" height="180" rx="8" /><text class="lbl" x="895" y="85" text-anchor="middle" font-weight="bold">semantic layer</text><text class="sub" x="895" y="110" text-anchor="middle">7 semantic models</text><text class="sub" x="895" y="126" text-anchor="middle">measures = 0/1 counters</text><text class="sub" x="895" y="142" text-anchor="middle">ratios = sum / sum</text><text class="sub" x="895" y="170" text-anchor="middle">Hex reads metrics</text><text class="sub" x="895" y="186" text-anchor="middle">saved queries = safe cuts</text></g>
+    <path class="edge" d="M160,150 L200,150" /><path class="edge" d="M350,150 L390,150" /><path class="edge" d="M540,150 L580,150" /><path class="edge" d="M760,150 L800,150" />
+    <g id="expl"><rect class="node warn" x="390" y="255" width="370" height="35" rx="8" /><text class="lbl onw" x="575" y="277" text-anchor="middle">exploratory: Amplitude 90-day table + views, tests warn, own selector</text></g>
+  </svg>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title text-base">Production vs exploratory, three differences</h3><ul class="list-disc ms-5 text-sm space-y-1"><li><code>production</code> selector never includes the Amplitude branch; separate job.</li><li>Exploratory tests are <code>severity: warn</code>; production tests block.</li><li>Contracts enforced only on <code>marts/</code>.</li></ul></div></div>
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title text-base">Materialization rule of thumb</h3><ul class="list-disc ms-5 text-sm space-y-1"><li>No logic, no storage: staging and intermediate are views.</li><li>Big and mutable: incremental merge with a lookback (3 large facts).</li><li>Small or cheap to recompute: table (aggs, dims, reviews, tasks).</li><li>Needs history the source throws away: snapshot.</li></ul></div></div>
+  </div>
+</section>
+
+<!-- 5 DECISIONS -->
+<section id="decisions" class="space-y-6">
+  <h2 class="text-2xl font-bold">5. Six decisions that changed between the GPT draft and the submission</h2>
+  <p>Each card is a likely interview question. The last line of each is the sentence to say.</p>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">CDC: dedupe the change log</h3><p class="text-sm"><b>Draft:</b> assume a merged current-state replica, refuse to dedupe ("no ordering column supplied").</p><p class="text-sm"><b>Now:</b> assume append-only log with <code>_cdc_lsn</code>, <code>_cdc_operation</code>, <code>_cdc_loaded_at</code>. <code>cdc_current_rows()</code> keeps the highest LSN per key and drops DELETE. One variable flips to pass-through. Synthetic data proves it: 402 log rows become 399 current rows.</p><p class="text-sm italic">"Staging owns the CDC contract. Downstream never deduplicates again."</p></div></div>
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">Incremental on updated_at, with a lookback</h3><p class="text-sm"><b>Draft:</b> full rebuild of 15M/20M/30M-row tables every run; one incremental path shipped disabled.</p><p class="text-sm"><b>Now:</b> merge on the natural key, filter <code>updated_at >= max(updated_at) - 3 days</code>. Creation-date filters miss an old attempt that changes today; update-date filters catch it. Full refresh stays one flag away.</p><p class="text-sm italic">"Filter on when the row changed, not when it was born."</p></div></div>
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">completed_at from a snapshot</h3><p class="text-sm"><b>Draft:</b> "no completed_at supplied", so finance volume was on creation date.</p><p class="text-sm"><b>Now:</b> <code>snap_transaction_state</code> records every state transition dbt sees. <code>completed_at</code> = first COMPLETED transition, else <code>updated_at</code> when the current state is COMPLETED (the brief defines updated_at as the last state change). Volume on <code>completed_date</code>; success rate on creation cohort.</p><p class="text-sm italic">"Two clocks, two columns, never mixed in one aggregate."</p></div></div>
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">USD via as-of rate, not exchange_rate</h3><p class="text-sm"><b>Draft:</b> exact-date join to an approved rate table; any weekend nulled the whole day.</p><p class="text-sm"><b>Now:</b> latest rate on or before the transaction date, max 7 days old, <code>fx_rate_age_days</code> exposed. Still null (not partial) when no rate exists. <code>exchange_rate</code> is sent-to-received (GBP to KES), never USD.</p><p class="text-sm italic">"The supplied exchange rate answers a different question."</p></div></div>
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">Denominators are the brief's, not the textbook's</h3><p class="text-sm">Provider success = completed / all attempts, pending included (1 of 3 is 33%, not 50%). False positive rate = FALSE_POSITIVE / all formal reviews, INCONCLUSIVE and repeats included. Rates are sums divided by sums so 90/100 and 1/10 give 82.7%, not 50%.</p><p class="text-sm italic">"A different denominator is a different metric with a different name."</p></div></div>
+    <div class="card card-border bg-base-200"><div class="card-body"><h3 class="card-title">Task linkage is inferred, and says so</h3><p class="text-sm">No key from task to workflow execution. Match on the same entity, a task-producing action, and a 60-minute window. One candidate = <code>UNIQUE_INFERRED</code>; two = <code>AMBIGUOUS</code>; none = <code>UNMATCHED</code>. Every task stays counted. The real fix is upstream: emit <code>workflow_execution_id</code>.</p><p class="text-sm italic">"Nearest is not cause. I keep the ambiguity visible and ask for the key."</p></div></div>
+  </div>
+</section>
+
+<!-- 6 UNKNOWNS -->
+<section id="unknowns" class="space-y-6">
+  <h2 class="text-2xl font-bold">6. Known unknowns and unknown unknowns</h2>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div>
+      <h3 class="font-bold mb-2">Known unknowns (each one is a row in the assumptions table)</h3>
+      <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-200"><table class="table table-sm"><thead><tr><th>Gap</th><th>Assumption made</th></tr></thead><tbody>
+        <tr><td>StreamServe landing shape</td><td>Append-only log; <code>cdc_landing_mode</code> var</td></tr>
+        <tr><td>Hard deletes</td><td><code>_cdc_operation = 'DELETE'</code></td></tr>
+        <tr><td>No completed_at</td><td>Snapshot history, fallback updated_at</td></tr>
+        <tr><td>No USD rates</td><td>Declared <code>daily_fx_rates</code> dependency</td></tr>
+        <tr><td>No task to workflow key</td><td>Windowed candidate match, labelled</td></tr>
+        <tr><td>associated_ids positions</td><td>[0] and [2] per task type; others unsupported</td></tr>
+        <tr><td>Which KYC step is final</td><td><code>is_final_step = true</code> event property</td></tr>
+        <tr><td>Anonymous Amplitude events</td><td>Single-user device stitched; shared unresolved</td></tr>
+        <tr><td>Timezone</td><td>UTC everywhere</td></tr>
+        <tr><td>Outgoing P2P is "real outbound"?</td><td>Yes, flagged for Finance sign-off</td></tr>
+      </tbody></table></div>
+    </div>
+    <div>
+      <h3 class="font-bold mb-2">Unknown unknowns (guardrails, not answers)</h3>
+      <ul class="space-y-2 text-sm">
+        <li class="flex gap-2"><span class="badge badge-soft badge-primary">test</span><span>New transaction type appears: <code>has_unmapped_type</code> fails the build instead of silently excluding it from volume.</span></li>
+        <li class="flex gap-2"><span class="badge badge-soft badge-primary">test</span><span>Enum drift: <code>accepted_values</code> on 17 state and type columns.</span></li>
+        <li class="flex gap-2"><span class="badge badge-soft badge-primary">test</span><span>Duplicate keys after CDC collapse: <code>unique</code> on every staging key.</span></li>
+        <li class="flex gap-2"><span class="badge badge-soft badge-primary">test</span><span>Aggregate drifts from fact: reconciliation tests on counts and reviews.</span></li>
+        <li class="flex gap-2"><span class="badge badge-soft badge-primary">test</span><span>Latency bands overlap or leak: band counts must sum to completed attempts.</span></li>
+        <li class="flex gap-2"><span class="badge badge-soft badge-secondary">freshness</span><span>Connector stalls: <code>_cdc_loaded_at</code> warn 15 min, <code>_fivetran_synced</code> warn 26 h.</span></li>
+        <li class="flex gap-2"><span class="badge badge-soft badge-secondary">config</span><span>Cross-source lag: 60-minute task window plus freshness gates.</span></li>
+        <li class="flex gap-2"><span class="badge badge-soft badge-secondary">config</span><span>PII in test failures: <code>store_failures: false</code>; marts omit names, phones, comments.</span></li>
+        <li class="flex gap-2"><span class="badge badge-soft badge-accent">meta</span><span>Every model declares <code>meta.grain</code>; an agent must state it before editing.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 7 ORCHESTRATION -->
+<section id="orchestration" class="space-y-6">
+  <h2 class="text-2xl font-bold">7. Orchestration and the path to production</h2>
+  <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-200"><table class="table table-sm"><thead><tr><th>Job</th><th>Selector</th><th>Cadence</th><th>Trigger</th><th>Why</th></tr></thead><tbody>
+    <tr><td><code>ops_hourly</code></td><td>tag:ops, fincrime, tasks + parents</td><td>hourly</td><td>schedule, no overlap</td><td>incremental merge keeps it cheap; snapshot first</td></tr>
+    <tr><td><code>finance_daily</code></td><td>tag:finance + parents</td><td>01:00 UTC</td><td>FX rate freshness gate</td><td>reconciliation tests block publish</td></tr>
+    <tr><td><code>growth_daily</code></td><td>selector:exploratory</td><td>daily</td><td>Fivetran sync-complete webhook</td><td>06:00 is when it starts, not when it finishes</td></tr>
+    <tr><td><code>full_refresh</code></td><td>all</td><td>on demand</td><td>manual</td><td>after a policy seed change or backfill</td></tr>
+  </tbody></table></div>
+  <svg class="fig w-full" viewBox="0 0 1000 150" role="img" aria-label="Dev to prod flow">
+    <title>Dev to production flow</title>
+    <g id="branch"><rect class="node" x="10" y="50" width="130" height="50" rx="8" /><text class="lbl" x="75" y="72" text-anchor="middle">feature branch</text><text class="sub" x="75" y="88" text-anchor="middle">make build locally</text></g>
+    <g id="gha"><rect class="node" x="190" y="50" width="170" height="50" rx="8" /><text class="lbl" x="275" y="72" text-anchor="middle">GitHub Actions</text><text class="sub" x="275" y="88" text-anchor="middle">DuckDB build, mf, sqlfluff, parse</text></g>
+    <g id="slim"><rect class="node" x="410" y="50" width="200" height="50" rx="8" /><text class="lbl" x="510" y="72" text-anchor="middle">dbt Cloud slim CI</text><text class="sub" x="510" y="88" text-anchor="middle">state:modified+ into PR schema, defer</text></g>
+    <g id="merge"><rect class="node" x="660" y="50" width="120" height="50" rx="8" /><text class="lbl" x="720" y="72" text-anchor="middle">merge to main</text><text class="sub" x="720" y="88" text-anchor="middle">PR schema dropped</text></g>
+    <g id="prod"><rect class="node hi" x="830" y="50" width="160" height="50" rx="8" /><text class="lbl on" x="910" y="72" text-anchor="middle">production jobs</text><text class="lbl on" x="910" y="88" text-anchor="middle">read main</text></g>
+    <path class="edge" d="M140,75 L190,75" /><path class="edge" d="M360,75 L410,75" /><path class="edge" d="M610,75 L660,75" /><path class="edge" d="M780,75 L830,75" />
+  </svg>
+</section>
+
+<!-- 8 METRICS -->
+<section id="metrics" class="space-y-6">
+  <h2 class="text-2xl font-bold">8. The five metrics, as MetricFlow returned them</h2>
+  <p>Synthetic data, real queries. <code>make metrics</code> reproduces every number.</p>
+  <div class="overflow-x-auto rounded-box border border-base-content/10 bg-base-200"><table class="table table-sm"><thead><tr><th>Metric</th><th>Definition</th><th>Time axis</th><th>Sample output</th></tr></thead><tbody>
+    <tr><td><code>completed_transaction_volume</code></td><td>sum(sent_amount) for completed, qualifying</td><td>completed_date</td><td>2026-09-07: USD 260.51, GBP 589.45, EUR 1113.34 (grouped by currency, never summed across)</td></tr>
+    <tr><td><code>transaction_success_rate</code></td><td>completed / all qualifying</td><td>transaction_date (cohort)</td><td>2026-09-07 EUR: 0.667</td></tr>
+    <tr><td><code>disbursement_provider_success_rate</code></td><td>completed / all attempts</td><td>attempt_date</td><td>CELLULANT 0.604, TERRAPAY 0.576, THUNES 0.541</td></tr>
+    <tr><td><code>fincrime_false_positive_rate</code></td><td>FALSE_POSITIVE / all formal reviews</td><td>review_date</td><td>velocity_check 0.33, high_risk_country 0.60, new_recipient_large_amount 1.00</td></tr>
+    <tr><td><code>signup_to_first_transaction_hours</code></td><td>avg hours, signup completed to first transaction</td><td>signup day, by country</td><td>US 106.3, GB 95.0, DE 88.0</td></tr>
+  </tbody></table></div>
+</section>
+
+<!-- 9 AI WORKFLOW -->
+<section id="workflow" class="space-y-6">
+  <h2 class="text-2xl font-bold">9. How it was built with AI</h2>
+  <ul class="timeline timeline-vertical timeline-compact">
+    <li><div class="timeline-start text-sm opacity-70">Pass 1</div><div class="timeline-middle"><span class="badge badge-primary badge-xs"></span></div><div class="timeline-end timeline-box"><b>ChatGPT (GPT-6): first draft.</b> Brief in, full project out: 15 stagings, 9 marts, semantic YAML, docs. Good grains and denominators. Could not run dbt, so it built a SQLite harness and wrote hedged prose. Never parsed.</div><hr /></li>
+    <li><hr /><div class="timeline-start text-sm opacity-70">Review</div><div class="timeline-middle"><span class="badge badge-primary badge-xs"></span></div><div class="timeline-end timeline-box"><b>Claude Code: audit against the brief.</b> Found: contract type mismatches, <code>array_contains</code> on a VARIANT, mart reading <code>source()</code> directly, no CDC dedupe, no incremental plan, finance on creation date, exact-date FX join, disclaimers in the candidate's name.</div><hr /></li>
+    <li><hr /><div class="timeline-start text-sm opacity-70">Make it real</div><div class="timeline-middle"><span class="badge badge-primary badge-xs"></span></div><div class="timeline-end timeline-box"><b>Fresh git repo, uv, dbt 1.12.</b> Adapter-dispatch macros so the same SQL runs on DuckDB and Snowflake. Synthetic RAW generator with deliberate edge cases (CDC update and delete, exactly 24h latency, repeat reviews, retired rule version, shared device). <code>dbt build</code> green.</div><hr /></li>
+    <li><hr /><div class="timeline-start text-sm opacity-70">Upgrade</div><div class="timeline-middle"><span class="badge badge-primary badge-xs"></span></div><div class="timeline-end timeline-box"><b>Senior-level changes.</b> CDC macro, incremental merge, snapshot, as-of FX, finance volume on completion date, dims, freshness, MCP config, sqlfluff, CI. Deleted the harness and every disclaimer.</div><hr /></li>
+    <li><hr /><div class="timeline-start text-sm opacity-70">Docs</div><div class="timeline-middle"><span class="badge badge-primary badge-xs"></span></div><div class="timeline-end timeline-box"><b>Architecture, README, prompt log</b> rewritten in first person with one assumptions table. This explainer.</div></li>
+  </ul>
+  <div class="alert alert-soft alert-warning"><span><b>What the human did:</b> chose grains and denominators, decided the two finance clocks, rejected the Snowflake trial (the brief says "need not be runnable"; DuckDB plus <code>dbt parse --target prod</code> covers the risk), rejected the harness, read every model once before sending.</span></div>
+</section>
+
+<!-- 10 DRILL -->
+<section id="drill" class="space-y-6">
+  <h2 class="text-2xl font-bold">10. Interview drill</h2>
+  <div class="join join-vertical w-full">
+    <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-200"><input type="radio" name="drill" checked /><div class="collapse-title font-semibold">Two dashboards disagree: 90% vs 82% payout success. Go.</div><div class="collapse-content text-sm"><p>First question: what is one row? 90 successful transfers out of 100 versus 90 successful attempts out of 110 are both right. Then: same date axis (creation vs completion)? same state cutoff? pending excluded on one? retries counted? cache age? Reproduce both numbers from <code>fct_disbursement_attempts</code> and <code>fct_transactions</code>, diff by key on the day they diverge, then fix the definition in the semantic layer so both read the same metric.</p></div></div>
+    <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-200"><input type="radio" name="drill" /><div class="collapse-title font-semibold">Why not incremental on every model?</div><div class="collapse-content text-sm"><p>Views cost nothing to keep fresh. Aggregates recompute from facts in seconds. Only the three large mutable facts pay for merge. Incremental needs a change signal I trust: <code>updated_at</code> plus a lookback. Tables without an update column (users) stay full rebuild until the CDC checkpoint is exposed.</p></div></div>
+    <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-200"><input type="radio" name="drill" /><div class="collapse-title font-semibold">What if StreamServe already merges to current state?</div><div class="collapse-content text-sm"><p><code>cdc_landing_mode: current_state</code>. The macro becomes <code>select *</code>. Nothing else changes. What I lose is the delete signal and the ability to see intermediate states between runs; the snapshot still captures what dbt sees.</p></div></div>
+    <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-200"><input type="radio" name="drill" /><div class="collapse-title font-semibold">Why is the false positive rate not FP/(FP+TN)?</div><div class="collapse-content text-sm"><p>Because the brief defines it as FALSE_POSITIVE reviews over all reviews, and the source has no true negatives (rules that passed are not reviewed). A classifier-style rate would need a different denominator and a different name.</p></div></div>
+    <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-200"><input type="radio" name="drill" /><div class="collapse-title font-semibold">Why is Amplitude not in the production job?</div><div class="collapse-content text-sm"><p>100M rows, daily batch, no production consumer, and two contracts unconfirmed (final KYC step, identity). It has its own selector, its own job triggered by the Fivetran webhook, and warn-only tests. Promotion criteria are written in the architecture doc.</p></div></div>
+    <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-200"><input type="radio" name="drill" /><div class="collapse-title font-semibold">How would an AI agent work safely in this repo?</div><div class="collapse-content text-sm"><p><code>AGENTS.md</code> is the contract: state the grain, reproduce before changing, write the failing test, run <code>make build</code>, attach evidence. <code>.mcp.json</code> gives it dbt and Snowflake tools with a read-only role and an XS warehouse. <code>docs/agent_evaluation.md</code> holds nine golden tasks, including a prompt-injection case in a review comment.</p></div></div>
+    <div class="collapse collapse-arrow join-item border border-base-content/10 bg-base-200"><input type="radio" name="drill" /><div class="collapse-title font-semibold">What would you ask NALA first?</div><div class="collapse-content text-sm"><p>StreamServe landing shape and metadata columns. Whether outgoing P2P counts as commercial volume. Who owns the USD rate feed. Whether tasks can carry <code>workflow_execution_id</code>. Which KYC event means "done".</p></div></div>
+  </div>
+</section>
+
+<footer class="text-sm opacity-60 pt-8 border-t border-base-content/10">Repository: <code>~/Documents/projects/NalaTask</code>. Reproduce: <code>uv sync && make build && make metrics</code>.</footer>
+</div>
+</body>
+</html>
