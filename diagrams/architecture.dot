@@ -1,0 +1,38 @@
+digraph G {
+graph [rankdir=LR, bgcolor="white", pad="0.2", nodesep="0.25", ranksep="0.38", fontname="Helvetica"];
+node [shape=box, style="rounded,filled", fillcolor="#EDF4F7", color="#527482", fontname="Helvetica", fontsize=11, margin="0.13,0.10"];
+edge [color="#577281", fontname="Helvetica", fontsize=9, arrowsize=0.7];
+
+pay [label="Payments Postgres
+9 supplied tables"];
+fc [label="Fincrime Postgres
+5 supplied tables"];
+amp [label="Amplitude
+1 supplied event table"];
+cdc [label="StreamServe CDC
+current-row replica assumed"];
+batch [label="Fivetran daily
+~06:00 UTC sync"];
+raw [label="RAW database
+source-owned relations",fillcolor="#E1ECF8"];
+stg [label="15 staging views
+cast + name + test"];
+prod [label="4 intermediate views
+9 production marts
+explicit fact grains",fillcolor="#D9EEE8"];
+poc [label="3 exploratory models
+90-day event window
+not an operational SLA",fillcolor="#FFF0D7"];
+fx [label="NEW dependency
+Approved daily USD rates
+not supplied in the brief",fillcolor="#FFF0D7"];
+sem [label="6 semantic models
+5 required metrics
++ ratio helpers",fillcolor="#D9EEE8"];
+hex [label="Planned Hex consumers
+currency-safe saved queries"];
+pay->cdc;fc->cdc;cdc->raw;amp->batch;batch->raw;raw->stg;
+stg->prod;stg->poc;fx->prod [style=dashed,label="coverage gate"];
+prod->sem;poc->sem [style=dashed,label="exploratory"];
+sem->hex;prod->hex [label="daily marts"];
+}

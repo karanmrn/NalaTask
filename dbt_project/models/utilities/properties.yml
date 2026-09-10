@@ -1,0 +1,19 @@
+version: 2
+models:
+- name: metricflow_time_spine
+  description: One row per calendar day from 2020 for 7305 days. Extend and validate coverage before dates
+    exceed the configured spine.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per calendar day from 2020 for 7305 days
+  columns:
+  - name: date_day
+    description: Dense UTC calendar date.
+    data_type: date
+    data_tests:
+    - not_null
+    - unique
+    granularity: day
+  time_spine:
+    standard_granularity_column: date_day

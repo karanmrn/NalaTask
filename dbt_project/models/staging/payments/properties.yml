@@ -1,0 +1,689 @@
+version: 2
+models:
+- name: stg_payments__users
+  description: One row per source users record. Typed current state; no financial filters or hidden deduplication.
+    Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source users record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: user_id
+    description: Primary key. Unique identifier for the user.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: user_status
+    description: 'Current account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`, `PENDING`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - ACTIVE
+          - INACTIVE
+          - SUSPENDED
+          - PENDING
+  - name: source
+    description: Object describing how the user was acquired. Contains a `link` key with the referral or attribution
+      URL.
+    data_type: variant
+  - name: sender_country
+    description: ISO country code for the country the user sends money from (e.g. `GB`, `US`, `DE`).
+    data_type: varchar
+  - name: registered_at
+    description: Timestamp when the user registered.
+    data_type: timestamp_ntz
+  - name: approved_at
+    description: Timestamp when the user was approved to transact (post-KYC). Null if not yet approved.
+    data_type: timestamp_ntz
+  - name: client_properties
+    description: Device and client metadata set by the mobile app.
+    data_type: variant
+  - name: used_invitation_code_id
+    description: Foreign key to the invitation code used at signup. Null if no code was used.
+    data_type: varchar
+  - name: profile_picture
+    description: URL to the user's profile image. Null if not set.
+    data_type: varchar
+  - name: usage
+    description: Object containing user usage preferences. Contains `sender_country` and `recipient_countries`
+      keys.
+    data_type: variant
+- name: stg_payments__accounts
+  description: One row per source users_account record. Typed current state; no financial filters or hidden
+    deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source users_account record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: account_id
+    description: Primary key. Unique account identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: owner_user_id
+    description: Foreign key to `users.id`. The user who owns this account.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_payments__users')
+          field: user_id
+  - name: account_name
+    description: Display name for the account.
+    data_type: varchar
+  - name: account_type
+    description: 'Account type. Values: `PERSONAL`, `BUSINESS`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - PERSONAL
+          - BUSINESS
+  - name: account_status
+    description: 'Account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - ACTIVE
+          - INACTIVE
+          - SUSPENDED
+  - name: features
+    description: Feature flags and capabilities enabled for this account.
+    data_type: variant
+  - name: created_at
+    description: Timestamp when the account was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent update to this record.
+    data_type: timestamp_ntz
+  - name: profile_id
+    description: Reference to the account's profile configuration.
+    data_type: varchar
+  - name: limit_level
+    description: The transaction limit tier assigned to this account.
+    data_type: varchar
+  - name: client_properties
+    description: Client-side metadata.
+    data_type: variant
+  - name: deleted_at
+    description: Timestamp when the account was soft-deleted by the application. Null if the account is active.
+    data_type: timestamp_ntz
+- name: stg_payments__transactions
+  description: One row per source transactions_transaction record. Typed current state; no financial filters
+    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source transactions_transaction record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: transaction_id
+    description: Primary key. Unique transaction identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Foreign key to `users.id`. The user who initiated the transaction.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_payments__users')
+          field: user_id
+  - name: account_id
+    description: Foreign key to `users_account.id`. The account the transaction belongs to.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_payments__accounts')
+          field: account_id
+  - name: transaction_type
+    description: 'Transaction type. Values: `COLLECTION`, `CONVERSION`, `DISBURSEMENT`, `COLLECTION_CONVERSION`,
+      `CONVERSION_DISBURSEMENT`, `COLLECTION_CONVERSION_DISBURSEMENT`, `EARNED_REWARD`, `REVERSAL`, `INCOMING`,
+      `INCOMING_PEER_TO_PEER`, `OUTGOING_PEER_TO_PEER`, `CONVERSION_OUTGOING_PEER_TO_PEER`, `INCOMING_COLLECTION`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - COLLECTION
+          - CONVERSION
+          - DISBURSEMENT
+          - COLLECTION_CONVERSION
+          - CONVERSION_DISBURSEMENT
+          - COLLECTION_CONVERSION_DISBURSEMENT
+          - EARNED_REWARD
+          - REVERSAL
+          - INCOMING
+          - INCOMING_PEER_TO_PEER
+          - OUTGOING_PEER_TO_PEER
+          - CONVERSION_OUTGOING_PEER_TO_PEER
+          - INCOMING_COLLECTION
+  - name: transaction_state
+    description: 'Current transaction state. Values: `CREATED`, `COLLECTION_IN_PROGRESS`, `CONVERSION_IN_PROGRESS`,
+      `DISBURSEMENT_IN_PROGRESS`, `WORKFLOW_IN_PROGRESS`, `WAITING_ON_WORKFLOW`, `WAITING_ON_RECIPIENT_APPROVAL`,
+      `ON_HOLD`, `PENDING_CAPTURE`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`, `REJECTED`, `REFUNDED`,
+      `REVERSED_TO_WALLET`, `VOIDED`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - CREATED
+          - COLLECTION_IN_PROGRESS
+          - CONVERSION_IN_PROGRESS
+          - DISBURSEMENT_IN_PROGRESS
+          - WORKFLOW_IN_PROGRESS
+          - WAITING_ON_WORKFLOW
+          - WAITING_ON_RECIPIENT_APPROVAL
+          - ON_HOLD
+          - PENDING_CAPTURE
+          - COMPLETED
+          - FAILED
+          - CANCELLED
+          - EXPIRED
+          - REJECTED
+          - REFUNDED
+          - REVERSED_TO_WALLET
+          - VOIDED
+  - name: sent_amount
+    description: The amount the sender sent, in `sent_currency`.
+    data_type: number(38,8)
+  - name: sent_currency
+    description: ISO currency code of the sending currency (e.g. `GBP`, `USD`, `EUR`).
+    data_type: varchar
+  - name: received_amount
+    description: The amount the recipient receives, in `received_currency`.
+    data_type: number(38,8)
+  - name: received_currency
+    description: ISO currency code of the receiving currency (e.g. `KES`, `TZS`, `NGN`, `UGX`).
+    data_type: varchar
+  - name: exchange_rate
+    description: The exchange rate applied to this transaction (1 unit of sent_currency = exchange_rate units
+      of received_currency).
+    data_type: number(38,12)
+  - name: source_amount
+    description: The original amount before fees, in the sending currency.
+    data_type: number(38,8)
+  - name: recipient_id
+    description: Foreign key to `transactions_recipient.id`. The recipient of this transaction. Null for non-disbursement
+      types.
+    data_type: varchar
+  - name: recipient_account_id
+    description: Foreign key to `transactions_recipient_account.id`. The specific payment destination. Null
+      for non-disbursement types.
+    data_type: varchar
+  - name: workflow_id
+    description: Foreign key to the approval workflow, if the transaction requires one. Null for most transactions.
+    data_type: varchar
+  - name: created_at
+    description: Timestamp when the transaction was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent state change.
+    data_type: timestamp_ntz
+  - name: expires_at
+    description: Timestamp when the transaction offer expires if not completed.
+    data_type: timestamp_ntz
+  - name: memo
+    description: Optional note from the sender to the recipient.
+    data_type: varchar
+  - name: purpose
+    description: 'Purpose of the remittance. Values: `REMITTANCE`, `SALARY_AND_WAGES`, `GOODS_PURCHASE`, `SERVICES_PAYMENT`,
+      `BILLS_PAYMENT`, `P2P_TRANSFER`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - REMITTANCE
+          - SALARY_AND_WAGES
+          - GOODS_PURCHASE
+          - SERVICES_PAYMENT
+          - BILLS_PAYMENT
+          - P2P_TRANSFER
+  - name: from_wallet_id
+    description: Foreign key to `wallets.id`. The wallet the funds are collected from. Null for card-funded
+      transactions.
+    data_type: varchar
+  - name: to_wallet_id
+    description: Foreign key to `wallets.id`. The wallet the funds are disbursed to. Null for bank/mobile money
+      payouts.
+    data_type: varchar
+  - name: summary
+    description: 'Structured summary of the transaction. Contains nested objects: `original.source_amount.amount`
+      (float, the pre-fee amount), `fees` (array of fee objects, each with `definition.label` and `definition.kind`).'
+    data_type: variant
+  - name: metadata
+    description: Provider-specific metadata. Structure varies by payment method.
+    data_type: variant
+  - name: fee_label
+    description: Display label for the primary fee (e.g. `Transfer fee`).
+    data_type: varchar
+  - name: fee_kind
+    description: Fee classification (e.g. `FIXED`, `PERCENTAGE`).
+    data_type: varchar
+- name: stg_payments__collections
+  description: One row per source transactions_collection record. Typed current state; no financial filters
+    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source transactions_collection record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: collection_id
+    description: Primary key. Unique collection identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: transaction_id
+    description: Foreign key to `transactions_transaction.id`.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_payments__transactions')
+          field: transaction_id
+  - name: account_id
+    description: Foreign key to `users_account.id`. The account being collected for.
+    data_type: varchar
+  - name: collection_state
+    description: 'Collection state. Values: `CREATED`, `STARTED`, `WAITING_ON_CUSTOMER`, `WAITING_ON_PROVIDER`,
+      `COMPLETED`, `FAILED`, `CANCELLED`, `REFUNDED`, `PENDING_CAPTURE`, `CAPTURE_FAILED`, `VOIDED`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - CREATED
+          - STARTED
+          - WAITING_ON_CUSTOMER
+          - WAITING_ON_PROVIDER
+          - COMPLETED
+          - FAILED
+          - CANCELLED
+          - REFUNDED
+          - PENDING_CAPTURE
+          - CAPTURE_FAILED
+          - VOIDED
+  - name: amount
+    description: The amount being collected.
+    data_type: number(38,8)
+  - name: currency
+    description: ISO currency code of the collection amount.
+    data_type: varchar
+  - name: to_wallet_id
+    description: Foreign key to `wallets.id`. The wallet the collected funds are credited to.
+    data_type: varchar
+  - name: created_at
+    description: Timestamp when the collection was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent state change.
+    data_type: timestamp_ntz
+- name: stg_payments__disbursements
+  description: One row per source transactions_disbursement record. Typed current state; no financial filters
+    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source transactions_disbursement record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: disbursement_id
+    description: Primary key. Unique disbursement identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: transaction_id
+    description: Foreign key to `transactions_transaction.id`.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_payments__transactions')
+          field: transaction_id
+  - name: disbursement_state
+    description: 'Disbursement state. Values: `CREATED`, `READY`, `PREPARED`, `WAITING_ON_PROVIDER`, `COMPLETED`,
+      `FAILED`, `REVERSED`, `AMBIGUOUS`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - CREATED
+          - READY
+          - PREPARED
+          - WAITING_ON_PROVIDER
+          - COMPLETED
+          - FAILED
+          - REVERSED
+          - AMBIGUOUS
+  - name: amount
+    description: The amount being disbursed in the destination currency.
+    data_type: number(38,8)
+  - name: currency
+    description: ISO currency code of the disbursement amount.
+    data_type: varchar
+  - name: recipient_id
+    description: Foreign key to `transactions_recipient.id`.
+    data_type: varchar
+  - name: recipient_account_id
+    description: Foreign key to `transactions_recipient_account.id`. The specific payment destination.
+    data_type: varchar
+  - name: provider_name
+    description: The name of the payout provider handling this disbursement (e.g. `THUNES`, `TERRAPAY`, `CELLULANT`).
+    data_type: varchar
+  - name: created_at
+    description: Timestamp when the disbursement was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent state change.
+    data_type: timestamp_ntz
+- name: stg_payments__attempts
+  description: One row per source disbursement_attempts record. Typed current state; no financial filters or
+    hidden deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source disbursement_attempts record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: attempt_id
+    description: Primary key. Unique attempt identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: disbursement_id
+    description: Foreign key to `transactions_disbursement.id`.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_payments__disbursements')
+          field: disbursement_id
+  - name: attempt_state
+    description: 'Attempt state. Values: `CREATED`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `REVERSED`,
+      `AMBIGUOUS`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - CREATED
+          - WAITING_ON_PROVIDER
+          - COMPLETED
+          - FAILED
+          - REVERSED
+          - AMBIGUOUS
+  - name: provider_name
+    description: The payout provider used for this attempt.
+    data_type: varchar
+  - name: provider_id
+    description: The provider's internal reference for this attempt.
+    data_type: varchar
+  - name: selection_reason
+    description: 'How this provider was chosen for the attempt. Values: `PREDEFINED`, `PRIORITY_ORDER`, `SMART_ROUTING`,
+      `PROBING`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - PREDEFINED
+          - PRIORITY_ORDER
+          - SMART_ROUTING
+          - PROBING
+  - name: provider_error_category
+    description: Standardised classification of the provider failure reason. Null on success.
+    data_type: varchar
+  - name: created_at
+    description: Timestamp when the attempt was initiated.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent state change.
+    data_type: timestamp_ntz
+  - name: eta
+    description: Estimated time of arrival for the payout.
+    data_type: timestamp_ntz
+  - name: max_eta
+    description: Maximum expected delivery time. Used for SLA monitoring.
+    data_type: timestamp_ntz
+  - name: error
+    description: Error message from the system, if the attempt failed. Null on success.
+    data_type: varchar
+  - name: provider_error
+    description: Error message returned by the provider, if any. Null on success.
+    data_type: varchar
+  - name: receipt_number
+    description: Provider-issued receipt or confirmation number. Null until completed.
+    data_type: varchar
+  - name: psp_account_id
+    description: The PSP (payment service provider) account used for routing.
+    data_type: varchar
+- name: stg_payments__recipients
+  description: One row per source transactions_recipient record. Typed current state; no financial filters
+    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source transactions_recipient record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: recipient_id
+    description: Primary key. Unique recipient identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: account_id
+    description: Foreign key to `users_account.id`. The account that created this recipient.
+    data_type: varchar
+  - name: first_name
+    description: The recipient's first name.
+    data_type: varchar
+  - name: last_name
+    description: The recipient's last name.
+    data_type: varchar
+  - name: recipient_type
+    description: 'Recipient type. Values: `INDIVIDUAL`, `BUSINESS`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - INDIVIDUAL
+          - BUSINESS
+  - name: created_at
+    description: Timestamp when the recipient was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent update.
+    data_type: timestamp_ntz
+- name: stg_payments__recipient_accounts
+  description: One row per source transactions_recipient_account record. Typed current state; no financial
+    filters or hidden deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source transactions_recipient_account record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: recipient_account_id
+    description: Primary key. Unique recipient account identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: recipient_id
+    description: Foreign key to `transactions_recipient.id`.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_payments__recipients')
+          field: recipient_id
+  - name: destination_type
+    description: 'Payment destination type. Values: `MOBILE_MONEY`, `BANK_ACCOUNT`, `UPI`, `BUY_GOODS`, `PAY_BILL`,
+      `PEER_TO_PEER`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - MOBILE_MONEY
+          - BANK_ACCOUNT
+          - UPI
+          - BUY_GOODS
+          - PAY_BILL
+          - PEER_TO_PEER
+  - name: country
+    description: ISO country code of the recipient's country.
+    data_type: varchar
+  - name: currency
+    description: ISO currency code of the destination currency.
+    data_type: varchar
+  - name: phone_number
+    description: Recipient's phone number (for mobile money). Null for non-mobile-money types.
+    data_type: varchar
+  - name: operator
+    description: Mobile money operator name (e.g. `MPESA`, `AIRTEL`, `MTN`). Null for non-mobile-money types.
+    data_type: varchar
+  - name: account_number
+    description: Bank account number or identifier. Null for non-bank types.
+    data_type: varchar
+  - name: bank_code
+    description: Bank identifier code. Null for non-bank types.
+    data_type: varchar
+  - name: bank_name
+    description: Name of the bank. Null for non-bank types.
+    data_type: varchar
+  - name: created_at
+    description: Timestamp when the recipient account was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent update.
+    data_type: timestamp_ntz
+- name: stg_payments__tasks
+  description: One row per source tasks_task record. Typed current state; no financial filters or hidden deduplication.
+    Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source tasks_task record
+    tags:
+    - staging
+    - payments
+    materialized: view
+  columns:
+  - name: task_id
+    description: Primary key. Unique task identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: service
+    description: 'The service that created the task. Values: `fincrime`, `compliance`, `support`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - fincrime
+          - compliance
+          - support
+  - name: task_type
+    description: Task type, specific to the service (e.g. `user_review`, `transaction_review`, `escalation`).
+    data_type: varchar
+  - name: task_state
+    description: 'Task state. Values: `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CANCELLED`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - OPEN
+          - IN_PROGRESS
+          - RESOLVED
+          - CANCELLED
+  - name: priority
+    description: 'Priority level. Values: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - LOW
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+  - name: staff_id
+    description: The staff member who created the task. Null for system-generated tasks.
+    data_type: varchar
+  - name: assignee_id
+    description: The staff member currently assigned to the task. Null if unassigned.
+    data_type: varchar
+  - name: associated_ids
+    description: Array of entity IDs related to the task. Index 0 is typically the primary entity (user_id
+      or transaction_id). Index 2 (when present) is the user_id for transaction tasks.
+    data_type: variant
+  - name: content
+    description: Task content and context. Contains keys like `disbursement_id`, `account_id`, `provider_name`
+      depending on the task type.
+    data_type: variant
+  - name: created_at
+    description: Timestamp when the task was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent update.
+    data_type: timestamp_ntz
+  - name: resolution
+    description: 'Resolution outcome. Values: `APPROVED`, `REJECTED`, `ESCALATED`. Null while open.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - APPROVED
+          - REJECTED
+          - ESCALATED

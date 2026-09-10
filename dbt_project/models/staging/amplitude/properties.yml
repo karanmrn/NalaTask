@@ -1,0 +1,68 @@
+version: 2
+models:
+- name: stg_amplitude__events
+  description: One row per source events record. Typed current state; no financial filters or hidden deduplication.
+    Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source events record
+    tags:
+    - staging
+    - amplitude
+    materialized: view
+  columns:
+  - name: event_id
+    description: Primary key. Unique event identifier assigned by Amplitude.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: The NALA user ID (matches `Source 1 users.id`). Null for anonymous events before the user
+      logs in or creates an account.
+    data_type: varchar
+  - name: device_id
+    description: Unique device identifier. Present for all events including anonymous ones.
+    data_type: varchar
+  - name: event_type
+    description: The event name, using dot-notation (e.g. `sign_up.started`, `sign_up.completed`, `kyc_step.completed`,
+      `send_money_screen.started`, `transaction.completed`, `open_wallet_account.completed`, `app.opened`).
+    data_type: varchar
+  - name: event_time
+    description: Timestamp of the event on the client device.
+    data_type: timestamp_ntz
+  - name: event_properties
+    description: Event-specific properties. Structure varies by event type.
+    data_type: variant
+  - name: user_properties
+    description: User properties at the time of the event. May contain `email`, `account_status`, `plan_type`,
+      `signup_date`.
+    data_type: variant
+  - name: platform
+    description: 'Client platform. Values: `iOS`, `Android`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - iOS
+          - Android
+  - name: os_name
+    description: Operating system name.
+    data_type: varchar
+  - name: country
+    description: ISO country code derived from the user's IP address.
+    data_type: varchar
+  - name: city
+    description: City name derived from IP geolocation.
+    data_type: varchar
+  - name: app_version
+    description: Version of the NALA app that generated the event.
+    data_type: varchar
+  - name: session_id
+    description: Session identifier grouping events within a single app session.
+    data_type: number(38,0)
+  - name: server_upload_time
+    description: Timestamp when Amplitude's servers received the event.
+    data_type: timestamp_ntz

@@ -1,0 +1,301 @@
+version: 2
+semantic_models:
+- name: transactions
+  description: Creation-day cohort in UTC, current state; Finance-approved five-type eligibility. Historical dates
+    restate. Required grouping for local money is a serving contract, not an automatic MetricFlow constraint.
+  model: ref('fct_transactions')
+  defaults:
+    agg_time_dimension: transaction_date
+  entities:
+  - name: transaction
+    type: primary
+    expr: transaction_id
+  dimensions:
+  - name: transaction_date
+    type: time
+    description: transaction date
+    type_params:
+      time_granularity: day
+  - name: currency_corridor
+    type: categorical
+    description: currency corridor
+  - name: sent_currency
+    type: categorical
+    description: sent currency
+  - name: transaction_type
+    type: categorical
+    description: transaction type
+  measures:
+  - name: completed_transaction_volume_measure
+    description: Sum only within one sending currency. Group/filter by sent_currency or corridor; no meaningful
+      global local-currency total.
+    agg: sum
+    expr: completed_sent_amount
+  - name: qualified_transactions_measure
+    description: qualifying_count
+    agg: sum
+    expr: qualifying_count
+  - name: completed_qualified_transactions_measure
+    description: completed_qualifying_count
+    agg: sum
+    expr: completed_qualifying_count
+- name: disbursement_attempts
+  description: One row per attempt. All states are in the denominator. Use attempt provider, not parent disbursement
+    provider.
+  model: ref('fct_disbursement_attempts')
+  defaults:
+    agg_time_dimension: attempt_date
+  entities:
+  - name: disbursement_attempt
+    type: primary
+    expr: attempt_id
+  dimensions:
+  - name: attempt_date
+    type: time
+    description: attempt date
+    type_params:
+      time_granularity: day
+  - name: provider_name
+    type: categorical
+    description: provider name
+  - name: attempt_state
+    type: categorical
+    description: attempt state
+  - name: selection_reason
+    type: categorical
+    description: selection reason
+  - name: completion_time_band
+    type: categorical
+    description: completion time band
+  measures:
+  - name: attempt_count_measure
+    description: attempt_count
+    agg: sum
+    expr: attempt_count
+  - name: completed_attempt_count_measure
+    description: completed_attempt_count
+    agg: sum
+    expr: completed_attempt_count
+- name: rule_reviews
+  description: One row per formal review. Review-day time axis; INCONCLUSIVE and repeat formal reviews count in
+    the denominator per the brief.
+  model: ref('fct_rule_reviews')
+  defaults:
+    agg_time_dimension: review_date
+  entities:
+  - name: rule_review
+    type: primary
+    expr: review_id
+  dimensions:
+  - name: review_date
+    type: time
+    description: review date
+    type_params:
+      time_granularity: day
+  - name: rule_name
+    type: categorical
+    description: rule name
+  - name: rule_category
+    type: categorical
+    description: rule category
+  - name: rule_version
+    type: categorical
+    description: rule version
+  - name: review_determination
+    type: categorical
+    description: review determination
+  measures:
+  - name: formal_review_count_measure
+    description: review_count
+    agg: sum
+    expr: review_count
+  - name: false_positive_review_count_measure
+    description: false_positive_count
+    agg: sum
+    expr: false_positive_count
+- name: onboarding
+  description: EXPLORATORY. Daily signup-completion cohorts. Country is signup-event IP country, not verified domicile.
+    First observed within 90 days is not proven lifetime first.
+  model: ref('fct_onboarding_funnel')
+  defaults:
+    agg_time_dimension: signup_completed_at
+  entities:
+  - name: onboarding_entity
+    type: primary
+    expr: funnel_entity_id
+  dimensions:
+  - name: signup_completed_at
+    type: time
+    description: signup completed at
+    type_params:
+      time_granularity: day
+  - name: signup_country
+    type: categorical
+    description: signup country
+  measures:
+  - name: signup_to_first_transaction_hours_measure
+    description: Resolved users with an observed transaction after signup. Independent of KYC logging. Nulls excluded
+      from mean; bounded observation window and converter-only bias apply.
+    agg: average
+    expr: signup_to_first_transaction_hours
+- name: rule_execution_activity
+  description: Optional production building blocks for execution volume/noise analysis. FAIL-as-trigger requires
+    domain confirmation.
+  model: ref('fct_rule_executions')
+  defaults:
+    agg_time_dimension: execution_date
+  entities:
+  - name: rule_execution
+    type: primary
+    expr: rule_execution_id
+  dimensions:
+  - name: execution_date
+    type: time
+    description: execution date
+    type_params:
+      time_granularity: day
+  - name: rule_name
+    type: categorical
+    description: rule name
+  - name: rule_category
+    type: categorical
+    description: rule category
+  - name: rule_version
+    type: categorical
+    description: rule version
+  measures:
+  - name: rule_executions_measure
+    description: execution_count
+    agg: sum
+    expr: execution_count
+  - name: rule_triggers_proxy_measure
+    description: trigger_count_proxy
+    agg: sum
+    expr: trigger_count_proxy
+- name: fincrime_tasks
+  description: Optional production building blocks. Inferred linkage is not causal certainty; all unlinked tasks
+    remain in totals.
+  model: ref('fct_fincrime_tasks')
+  defaults:
+    agg_time_dimension: task_date
+  entities:
+  - name: fincrime_task
+    type: primary
+    expr: task_id
+  dimensions:
+  - name: task_date
+    type: time
+    description: task date
+    type_params:
+      time_granularity: day
+  - name: match_status
+    type: categorical
+    description: match status
+  - name: inferred_workflow_result
+    type: categorical
+    description: inferred workflow result
+  - name: resolution
+    type: categorical
+    description: resolution
+  measures:
+  - name: fincrime_task_count_measure
+    description: task_count
+    agg: sum
+    expr: task_count
+  - name: resolved_fincrime_task_count_measure
+    description: resolved_task_count
+    agg: sum
+    expr: resolved_task_count
+metrics:
+- name: completed_transaction_volume
+  label: Completed Transaction Volume
+  description: REQUIRED. Completed qualifying sent amount in local currency. Always select a sending currency/corridor;
+    no cross-currency grand total. UTC creation date; not completion-date accounting.
+  type: simple
+  type_params:
+    measure: completed_transaction_volume_measure
+- name: completed_qualifying_transactions
+  label: Completed Qualifying Transactions
+  description: 'Helper numerator: completed five-type outbound transactions.'
+  type: simple
+  type_params:
+    measure: completed_qualified_transactions_measure
+- name: all_qualifying_transactions
+  label: All Qualifying Transactions
+  description: 'Helper denominator: all states of five-type outbound transactions.'
+  type: simple
+  type_params:
+    measure: qualified_transactions_measure
+- name: transaction_success_rate
+  label: Transaction Success Rate
+  description: REQUIRED. Completed/all qualifying transactions, aggregated counts rather than averaged rates. Creation-cohort
+    date, current-state outcomes.
+  type: ratio
+  type_params:
+    numerator: completed_qualifying_transactions
+    denominator: all_qualifying_transactions
+- name: completed_disbursement_attempts
+  label: Completed Disbursement Attempts
+  description: 'Helper numerator: completed attempts.'
+  type: simple
+  type_params:
+    measure: completed_attempt_count_measure
+- name: all_disbursement_attempts
+  label: All Disbursement Attempts
+  description: 'Helper denominator: all attempts, including pending, failed, ambiguous and reversed.'
+  type: simple
+  type_params:
+    measure: attempt_count_measure
+- name: disbursement_provider_success_rate
+  label: Disbursement Provider Success Rate
+  description: REQUIRED. Completed/all attempts by attempt provider and creation day.
+  type: ratio
+  type_params:
+    numerator: completed_disbursement_attempts
+    denominator: all_disbursement_attempts
+- name: false_positive_reviews
+  label: False Positive Reviews
+  description: 'Helper numerator: all formal FALSE_POSITIVE review records.'
+  type: simple
+  type_params:
+    measure: false_positive_review_count_measure
+- name: all_formal_reviews
+  label: All Formal Reviews
+  description: 'Helper denominator: all formal reviews, including INCONCLUSIVE and repeat reviews.'
+  type: simple
+  type_params:
+    measure: formal_review_count_measure
+- name: fincrime_false_positive_rate
+  label: Fincrime False Positive Rate
+  description: 'REQUIRED per brief: FALSE_POSITIVE reviews divided by all formal reviews. Not FP/(FP+TN); not a
+    classifier population false-positive rate.'
+  type: ratio
+  type_params:
+    numerator: false_positive_reviews
+    denominator: all_formal_reviews
+- name: signup_to_first_transaction_hours
+  label: Signup To First Transaction Hours
+  description: REQUIRED EXPLORATORY. Mean hours from observed signup completion to first observed subsequent Amplitude
+    transaction completion for resolved users. Slice by signup_country and signup_completed_at day.
+  type: simple
+  type_params:
+    measure: signup_to_first_transaction_hours_measure
+saved_queries:
+- name: finance_volume_by_corridor
+  description: Mandatory safe grouping for mixed-currency local volume.
+  query_params:
+    metrics:
+    - completed_transaction_volume
+    - transaction_success_rate
+    group_by:
+    - TimeDimension('metric_time', 'day')
+    - Dimension('transaction__currency_corridor')
+    - Dimension('transaction__sent_currency')
+- name: provider_success_daily
+  description: All-state attempt denominator.
+  query_params:
+    metrics:
+    - disbursement_provider_success_rate
+    group_by:
+    - TimeDimension('metric_time', 'day')
+    - Dimension('disbursement_attempt__provider_name')

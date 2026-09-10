@@ -1,0 +1,14 @@
+transaction_type,is_volume_qualifying,rationale
+COLLECTION,false,Inbound collection leg; not outbound volume.
+CONVERSION,false,FX-only leg; not outbound movement.
+DISBURSEMENT,true,Outbound recipient payout.
+COLLECTION_CONVERSION,false,Collection and FX only; no outbound leg.
+CONVERSION_DISBURSEMENT,true,FX followed by outbound payout.
+COLLECTION_CONVERSION_DISBURSEMENT,true,End-to-end outbound remittance counted once at transaction grain.
+EARNED_REWARD,false,Reward credit; not customer outbound transfer.
+REVERSAL,false,Reversal; not new outbound transfer.
+INCOMING,false,Incoming movement.
+INCOMING_PEER_TO_PEER,false,Incoming side; exclude to avoid counting both directions.
+OUTGOING_PEER_TO_PEER,true,Assumption: outgoing peer transfer is money movement to a recipient.
+CONVERSION_OUTGOING_PEER_TO_PEER,true,Assumption: outgoing peer transfer after conversion qualifies.
+INCOMING_COLLECTION,false,Inbound collection; no outbound leg.

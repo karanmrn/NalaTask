@@ -1,0 +1,522 @@
+version: 2
+models:
+- name: fct_transactions
+  description: One row per transaction. Production metric interface; USD requires the explicitly additional
+    Finance-approved reference input.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per transaction
+    tags:
+    - finance
+  columns:
+  - name: transaction_id
+    description: Source transaction key.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Initiating user; pseudonymous but not anonymous.
+    data_type: varchar
+  - name: account_id
+    description: Owning account.
+    data_type: varchar
+  - name: transaction_type
+    description: Exact source type.
+    data_type: varchar
+  - name: transaction_state
+    description: Current source state.
+    data_type: varchar
+  - name: sent_amount
+    description: Amount in sending currency; not revenue.
+    data_type: number(38,8)
+  - name: sent_currency
+    description: Sending currency.
+    data_type: varchar
+  - name: received_currency
+    description: Receiving currency.
+    data_type: varchar
+  - name: created_at
+    description: Creation timestamp, UTC assumption.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Last state update, not guaranteed completion time.
+    data_type: timestamp_ntz
+  - name: transaction_date
+    description: UTC creation cohort date, not completion date.
+    data_type: date
+  - name: currency_corridor
+    description: Sending-receiving currency pair.
+    data_type: varchar
+  - name: is_volume_qualifying
+    description: Five-type outbound policy.
+    data_type: boolean
+  - name: has_unmapped_type
+    description: True indicates policy drift; blocks production.
+    data_type: boolean
+  - name: qualifying_count
+    description: 1 for qualifying transactions of any state.
+    data_type: number(38,0)
+  - name: completed_qualifying_count
+    description: 1 only for completed qualifying transactions.
+    data_type: number(38,0)
+  - name: completed_sent_amount
+    description: Qualifying completed amount, otherwise zero; group by currency.
+    data_type: number(38,8)
+  - name: usd_per_unit
+    description: 1 sending-currency unit in USD on creation cohort date.
+    data_type: number(38,12)
+  - name: fx_rate_source
+    description: Approved source; USD_IDENTITY only for USD.
+    data_type: varchar
+  - name: completed_sent_amount_usd
+    description: Completed volume converted to USD; null for missing or invalid required rate.
+    data_type: number(38,8)
+  - name: is_missing_fx
+    description: Required USD conversion unavailable; fails Finance publication.
+    data_type: boolean
+- name: agg_transactions_daily
+  description: One row per UTC creation day, currency corridor, sending currency and type. Missing required
+    rates make the entire group USD total null, never a silently partial sum.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per UTC creation day, currency corridor, sending currency and type
+    tags:
+    - finance
+  columns:
+  - name: transaction_date
+    description: Creation cohort day.
+    data_type: date
+  - name: currency_corridor
+    description: Currency pair; not geographic corridor.
+    data_type: varchar
+  - name: sent_currency
+    description: Required grouping for local-money totals.
+    data_type: varchar
+  - name: transaction_type
+    description: Outbound transaction type.
+    data_type: varchar
+  - name: qualifying_transactions
+    description: All states denominator.
+    data_type: number(38,0)
+  - name: completed_transactions
+    description: Completed qualifying count.
+    data_type: number(38,0)
+  - name: completed_sent_amount
+    description: Local currency total.
+    data_type: number(38,8)
+  - name: missing_fx_transactions
+    description: Completed records lacking usable FX.
+    data_type: number(38,0)
+  - name: completed_sent_amount_usd
+    description: Null when any required rate is missing.
+    data_type: number(38,8)
+  - name: transaction_success_rate
+    description: Ratio of aggregate counts; null on empty denominator.
+    data_type: float
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - transaction_date
+        - currency_corridor
+        - sent_currency
+        - transaction_type
+- name: fct_disbursement_attempts
+  description: One row per disbursement attempt, not transaction. Durations use last state-update proxies.
+    Incremental opt-in is disabled until update, lateness and deletion contracts are validated.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per disbursement attempt, not transaction
+    tags:
+    - ops
+  columns:
+  - name: attempt_id
+    description: Attempt key.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: disbursement_id
+    description: Parent payout; many attempts are allowed.
+    data_type: varchar
+  - name: attempt_state
+    description: Current attempt state.
+    data_type: varchar
+  - name: provider_name
+    description: Provider for this attempt, not eventual disbursement provider.
+    data_type: varchar
+  - name: selection_reason
+    description: Route selection policy; segment comparisons.
+    data_type: varchar
+  - name: provider_error_category
+    description: Standardised error class; no free text.
+    data_type: varchar
+  - name: created_at
+    description: Attempt creation.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Last state update; proxy only.
+    data_type: timestamp_ntz
+  - name: eta
+    description: Expected delivery estimate.
+    data_type: timestamp_ntz
+  - name: max_eta
+    description: Maximum expected delivery time.
+    data_type: timestamp_ntz
+  - name: attempt_date
+    description: Attempt creation cohort in UTC.
+    data_type: date
+  - name: attempt_count
+    description: Denominator includes all states.
+    data_type: number(38,0)
+  - name: completed_attempt_count
+    description: Numerator only COMPLETED.
+    data_type: number(38,0)
+  - name: failed_attempt_count
+    description: Count only FAILED; not a complement of success.
+    data_type: number(38,0)
+  - name: completion_seconds_proxy
+    description: Creation to last update for currently completed attempts; null otherwise.
+    data_type: number(38,6)
+  - name: failure_seconds_proxy
+    description: Creation to last update for currently failed attempts; null otherwise.
+    data_type: number(38,6)
+  - name: completion_time_band
+    description: Six specified bands; UNKNOWN for unavailable durations.
+    data_type: varchar
+- name: agg_provider_daily
+  description: One row per attempt creation day and provider. Completed-only latency averages are not a measure
+    of all unresolved attempts.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per attempt creation day and provider
+    tags:
+    - ops
+  columns:
+  - name: attempt_date
+    description: Attempt creation cohort day.
+    data_type: date
+  - name: provider_name
+    description: Attempt provider.
+    data_type: varchar
+  - name: attempts
+    description: All-state attempts.
+    data_type: number(38,0)
+  - name: completed_attempts
+    description: Currently completed.
+    data_type: number(38,0)
+  - name: failed_attempts
+    description: Currently failed.
+    data_type: number(38,0)
+  - name: provider_success_rate
+    description: Completed/all attempts; pending remain in denominator.
+    data_type: float
+  - name: avg_completion_seconds_proxy
+    description: Mean among available currently completed durations.
+    data_type: number(38,6)
+  - name: avg_failure_seconds_proxy
+    description: Mean among available currently failed durations.
+    data_type: number(38,6)
+  - name: under_1_min
+    description: Count of currently completed attempts in the named half-open duration band; 24h belongs to
+      1-24h.
+    data_type: number(38,0)
+  - name: from_1_to_5_min
+    description: Count of currently completed attempts in the named half-open duration band; 24h belongs to
+      1-24h.
+    data_type: number(38,0)
+  - name: from_5_to_30_min
+    description: Count of currently completed attempts in the named half-open duration band; 24h belongs to
+      1-24h.
+    data_type: number(38,0)
+  - name: from_30_min_to_1_hour
+    description: Count of currently completed attempts in the named half-open duration band; 24h belongs to
+      1-24h.
+    data_type: number(38,0)
+  - name: from_1_to_24_hours
+    description: Count of currently completed attempts in the named half-open duration band; 24h belongs to
+      1-24h.
+    data_type: number(38,0)
+  - name: over_24_hours
+    description: Count of currently completed attempts in the named half-open duration band; 24h belongs to
+      1-24h.
+    data_type: number(38,0)
+  - name: completed_duration_unknown
+    description: Completed attempts with unavailable or invalid duration.
+    data_type: number(38,0)
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - attempt_date
+        - provider_name
+- name: fct_rule_executions
+  description: One row per rule execution. Exact rule version, including historically soft-deleted definitions.
+    FAIL is a documented provisional trigger proxy, not proven fraud.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per rule execution
+    tags:
+    - fincrime
+  columns:
+  - name: rule_execution_id
+    description: Execution key.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: rule_id
+    description: Exact immutable version key.
+    data_type: varchar
+    data_tests:
+    - not_null
+  - name: workflow_execution_id
+    description: Parent workflow run.
+    data_type: varchar
+  - name: rule_name
+    description: Rule name for slicing.
+    data_type: varchar
+    data_tests:
+    - not_null
+  - name: rule_category
+    description: Rule category.
+    data_type: varchar
+    data_tests:
+    - not_null
+  - name: rule_version
+    description: Executed version, never latest-by-name.
+    data_type: number(38,0)
+  - name: rule_result
+    description: PASS/FAIL/ERROR; not an ops review determination.
+    data_type: varchar
+  - name: created_at
+    description: Rule execution creation.
+    data_type: timestamp_ntz
+  - name: execution_date
+    description: Creation day.
+    data_type: date
+  - name: execution_count
+    description: Denominator for volume and trigger proxy.
+    data_type: number(38,0)
+  - name: trigger_count_proxy
+    description: 1 for FAIL; validate alert semantics before ranking noise.
+    data_type: number(38,0)
+- name: fct_rule_reviews
+  description: One row per formal review record, including inconclusive and multiple reviews per execution.
+    Metric denominator is all formal reviews as specified, not only latest or conclusive reviews.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per formal review record, including inconclusive and multiple reviews per execution
+    tags:
+    - fincrime
+  columns:
+  - name: review_id
+    description: Formal review key.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: rule_execution_id
+    description: Reviewed execution.
+    data_type: varchar
+  - name: rule_id
+    description: Executed rule version key.
+    data_type: varchar
+    data_tests:
+    - not_null
+  - name: rule_name
+    description: Rule name.
+    data_type: varchar
+    data_tests:
+    - not_null
+  - name: rule_category
+    description: Rule category.
+    data_type: varchar
+    data_tests:
+    - not_null
+  - name: rule_version
+    description: Executed version.
+    data_type: number(38,0)
+  - name: review_determination
+    description: TRUE_POSITIVE/FALSE_POSITIVE/INCONCLUSIVE.
+    data_type: varchar
+  - name: reviewed_at
+    description: Formal review completion.
+    data_type: timestamp_ntz
+  - name: review_date
+    description: Review completion day, not execution cohort day.
+    data_type: date
+  - name: execution_created_at
+    description: Creation time of evaluated rule.
+    data_type: timestamp_ntz
+  - name: review_count
+    description: 1 per formal review, including INCONCLUSIVE.
+    data_type: number(38,0)
+  - name: false_positive_count
+    description: 1 for FALSE_POSITIVE.
+    data_type: number(38,0)
+  - name: review_seconds
+    description: Execution creation to formal review; repeat reviews each contribute.
+    data_type: number(38,6)
+- name: agg_fincrime_daily
+  description: One row per activity day and rule version. Execution counts use execution dates; review rates
+    use review dates. The combined operational view is not a cohort conversion rate.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per activity day and rule version
+    tags:
+    - fincrime
+  columns:
+  - name: activity_date
+    description: Calendar activity day; distinct event clocks are documented.
+    data_type: date
+  - name: rule_id
+    description: Rule version key.
+    data_type: varchar
+  - name: rule_name
+    description: Rule name.
+    data_type: varchar
+  - name: rule_category
+    description: Rule category.
+    data_type: varchar
+  - name: rule_version
+    description: Version.
+    data_type: number(38,0)
+  - name: executions
+    description: Executions created that day.
+    data_type: number(38,0)
+  - name: triggers_proxy
+    description: FAIL results created that day.
+    data_type: number(38,0)
+  - name: trigger_rate_proxy
+    description: FAIL/all executions; provisional trigger semantics.
+    data_type: float
+  - name: reviews
+    description: Formal reviews completed that day.
+    data_type: number(38,0)
+  - name: false_positives
+    description: FALSE_POSITIVE reviews completed that day.
+    data_type: number(38,0)
+  - name: false_positive_rate
+    description: False-positive reviews/all reviews including inconclusive.
+    data_type: float
+  - name: avg_review_seconds
+    description: Mean execution-to-review duration for reviews completed that day.
+    data_type: number(38,6)
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - activity_date
+        - rule_id
+- name: fct_fincrime_tasks
+  description: One row per fincrime task including unmatched and ambiguous tasks. UNIQUE_INFERRED is not a
+    proven causal link; request workflow_execution_id from the source before audited attribution.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per fincrime task including unmatched and ambiguous tasks
+    tags:
+    - tasks
+  columns:
+  - name: task_id
+    description: Task key; never multiply by candidate executions.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: task_type
+    description: Source task type.
+    data_type: varchar
+  - name: task_state
+    description: Current state.
+    data_type: varchar
+  - name: resolution
+    description: APPROVED/REJECTED/ESCALATED when populated.
+    data_type: varchar
+  - name: created_at
+    description: Created time.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Latest update, not dedicated resolved_at.
+    data_type: timestamp_ntz
+  - name: task_date
+    description: Task creation cohort.
+    data_type: date
+  - name: user_id
+    description: Resolved typed user context.
+    data_type: varchar
+  - name: transaction_id
+    description: Resolved typed transaction context.
+    data_type: varchar
+  - name: candidate_count
+    description: Number of eligible workflow candidates.
+    data_type: number(38,0)
+  - name: match_status
+    description: UNIQUE_INFERRED, AMBIGUOUS, UNMATCHED, UNSUPPORTED_CONTEXT or CONFLICTING_CONTEXT.
+    data_type: varchar
+  - name: inferred_workflow_execution_id
+    description: Populated only for a single plausible candidate.
+    data_type: varchar
+  - name: inferred_workflow_result
+    description: Result of unique candidate; observational correlation only.
+    data_type: varchar
+  - name: task_count
+    description: 1 for every fincrime task.
+    data_type: number(38,0)
+  - name: resolved_task_count
+    description: 1 only when RESOLVED; cancelled is not resolved.
+    data_type: number(38,0)
+  - name: resolution_seconds_proxy
+    description: Created to latest update for resolved tasks only.
+    data_type: number(38,6)
+- name: agg_fincrime_tasks_daily
+  description: One row per task creation day, linkage status, inferred workflow result and outcome. Retains
+    unattributed tasks in operational totals; group ratios must be recomputed from counts.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per task creation day, linkage status, inferred workflow result and outcome
+    tags:
+    - tasks
+  columns:
+  - name: task_date
+    description: Creation cohort day.
+    data_type: date
+  - name: match_status
+    description: Inference quality class.
+    data_type: varchar
+  - name: inferred_workflow_result
+    description: PASS/FAIL/ERROR only for unique inferred links.
+    data_type: varchar
+  - name: resolution
+    description: Task outcome; null while open.
+    data_type: varchar
+  - name: tasks_created
+    description: All tasks in group.
+    data_type: number(38,0)
+  - name: resolved_tasks
+    description: Resolved count.
+    data_type: number(38,0)
+  - name: resolved_proportion
+    description: Resolved/all tasks; not average of sub-group rates.
+    data_type: float
+  - name: avg_resolution_seconds_proxy
+    description: Mean for currently resolved tasks with valid update timestamp.
+    data_type: number(38,6)
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - task_date
+        - match_status
+        - inferred_workflow_result
+        - resolution

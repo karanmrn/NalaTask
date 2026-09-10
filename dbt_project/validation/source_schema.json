@@ -1,0 +1,972 @@
+{
+  "users": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique identifier for the user."
+      ],
+      [
+        "status",
+        "string",
+        "Current account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`, `PENDING`."
+      ],
+      [
+        "source",
+        "json",
+        "Object describing how the user was acquired. Contains a `link` key with the referral or attribution URL."
+      ],
+      [
+        "sender_country",
+        "string",
+        "ISO country code for the country the user sends money from (e.g. `GB`, `US`, `DE`)."
+      ],
+      [
+        "created",
+        "timestamp",
+        "Timestamp when the user registered."
+      ],
+      [
+        "allowed",
+        "timestamp",
+        "Timestamp when the user was approved to transact (post-KYC). Null if not yet approved."
+      ],
+      [
+        "client_properties",
+        "json",
+        "Device and client metadata set by the mobile app."
+      ],
+      [
+        "used_invitation_code_id",
+        "uuid",
+        "Foreign key to the invitation code used at signup. Null if no code was used."
+      ],
+      [
+        "profile_picture",
+        "string",
+        "URL to the user's profile image. Null if not set."
+      ],
+      [
+        "usage",
+        "json",
+        "Object containing user usage preferences. Contains `sender_country` and `recipient_countries` keys."
+      ]
+    ],
+    "model": "stg_payments__users"
+  },
+  "users_account": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique account identifier."
+      ],
+      [
+        "owner_id",
+        "uuid",
+        "Foreign key to `users.id`. The user who owns this account."
+      ],
+      [
+        "name",
+        "string",
+        "Display name for the account."
+      ],
+      [
+        "type",
+        "string",
+        "Account type. Values: `PERSONAL`, `BUSINESS`."
+      ],
+      [
+        "status",
+        "string",
+        "Account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`."
+      ],
+      [
+        "features",
+        "json",
+        "Feature flags and capabilities enabled for this account."
+      ],
+      [
+        "created",
+        "timestamp",
+        "Timestamp when the account was created."
+      ],
+      [
+        "last_updated",
+        "timestamp",
+        "Timestamp of the most recent update to this record."
+      ],
+      [
+        "profile_id",
+        "uuid",
+        "Reference to the account's profile configuration."
+      ],
+      [
+        "limit_level",
+        "string",
+        "The transaction limit tier assigned to this account."
+      ],
+      [
+        "client_properties",
+        "json",
+        "Client-side metadata."
+      ],
+      [
+        "deleted",
+        "timestamp",
+        "Timestamp when the account was soft-deleted by the application. Null if the account is active."
+      ]
+    ],
+    "model": "stg_payments__accounts"
+  },
+  "transactions_transaction": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique transaction identifier."
+      ],
+      [
+        "user_id",
+        "uuid",
+        "Foreign key to `users.id`. The user who initiated the transaction."
+      ],
+      [
+        "account_id",
+        "uuid",
+        "Foreign key to `users_account.id`. The account the transaction belongs to."
+      ],
+      [
+        "type",
+        "string",
+        "Transaction type. Values: `COLLECTION`, `CONVERSION`, `DISBURSEMENT`, `COLLECTION_CONVERSION`, `CONVERSION_DISBURSEMENT`, `COLLECTION_CONVERSION_DISBURSEMENT`, `EARNED_REWARD`, `REVERSAL`, `INCOMING`, `INCOMING_PEER_TO_PEER`, `OUTGOING_PEER_TO_PEER`, `CONVERSION_OUTGOING_PEER_TO_PEER`, `INCOMING_COLLECTION`."
+      ],
+      [
+        "state",
+        "string",
+        "Current transaction state. Values: `CREATED`, `COLLECTION_IN_PROGRESS`, `CONVERSION_IN_PROGRESS`, `DISBURSEMENT_IN_PROGRESS`, `WORKFLOW_IN_PROGRESS`, `WAITING_ON_WORKFLOW`, `WAITING_ON_RECIPIENT_APPROVAL`, `ON_HOLD`, `PENDING_CAPTURE`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`, `REJECTED`, `REFUNDED`, `REVERSED_TO_WALLET`, `VOIDED`."
+      ],
+      [
+        "sent_amount",
+        "decimal",
+        "The amount the sender sent, in `sent_currency`."
+      ],
+      [
+        "sent_currency",
+        "string",
+        "ISO currency code of the sending currency (e.g. `GBP`, `USD`, `EUR`)."
+      ],
+      [
+        "received_amount",
+        "decimal",
+        "The amount the recipient receives, in `received_currency`."
+      ],
+      [
+        "received_currency",
+        "string",
+        "ISO currency code of the receiving currency (e.g. `KES`, `TZS`, `NGN`, `UGX`)."
+      ],
+      [
+        "exchange_rate",
+        "decimal",
+        "The exchange rate applied to this transaction (1 unit of sent_currency = exchange_rate units of received_currency)."
+      ],
+      [
+        "source_amount",
+        "decimal",
+        "The original amount before fees, in the sending currency."
+      ],
+      [
+        "recipient_id",
+        "uuid",
+        "Foreign key to `transactions_recipient.id`. The recipient of this transaction. Null for non-disbursement types."
+      ],
+      [
+        "recipient_account_id",
+        "uuid",
+        "Foreign key to `transactions_recipient_account.id`. The specific payment destination. Null for non-disbursement types."
+      ],
+      [
+        "workflow_id",
+        "uuid",
+        "Foreign key to the approval workflow, if the transaction requires one. Null for most transactions."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the transaction was created."
+      ],
+      [
+        "updated_at",
+        "timestamp",
+        "Timestamp of the most recent state change."
+      ],
+      [
+        "expires_at",
+        "timestamp",
+        "Timestamp when the transaction offer expires if not completed."
+      ],
+      [
+        "memo",
+        "string",
+        "Optional note from the sender to the recipient."
+      ],
+      [
+        "purpose",
+        "string",
+        "Purpose of the remittance. Values: `REMITTANCE`, `SALARY_AND_WAGES`, `GOODS_PURCHASE`, `SERVICES_PAYMENT`, `BILLS_PAYMENT`, `P2P_TRANSFER`."
+      ],
+      [
+        "from_wallet_id",
+        "uuid",
+        "Foreign key to `wallets.id`. The wallet the funds are collected from. Null for card-funded transactions."
+      ],
+      [
+        "to_wallet_id",
+        "uuid",
+        "Foreign key to `wallets.id`. The wallet the funds are disbursed to. Null for bank/mobile money payouts."
+      ],
+      [
+        "summary",
+        "json",
+        "Structured summary of the transaction. Contains nested objects: `original.source_amount.amount` (float, the pre-fee amount), `fees` (array of fee objects, each with `definition.label` and `definition.kind`)."
+      ],
+      [
+        "metadata",
+        "json",
+        "Provider-specific metadata. Structure varies by payment method."
+      ],
+      [
+        "fee_label",
+        "string",
+        "Display label for the primary fee (e.g. `Transfer fee`)."
+      ],
+      [
+        "fee_kind",
+        "string",
+        "Fee classification (e.g. `FIXED`, `PERCENTAGE`)."
+      ]
+    ],
+    "model": "stg_payments__transactions"
+  },
+  "transactions_collection": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique collection identifier."
+      ],
+      [
+        "transaction_id",
+        "uuid",
+        "Foreign key to `transactions_transaction.id`."
+      ],
+      [
+        "account_id",
+        "uuid",
+        "Foreign key to `users_account.id`. The account being collected for."
+      ],
+      [
+        "state",
+        "string",
+        "Collection state. Values: `CREATED`, `STARTED`, `WAITING_ON_CUSTOMER`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `CANCELLED`, `REFUNDED`, `PENDING_CAPTURE`, `CAPTURE_FAILED`, `VOIDED`."
+      ],
+      [
+        "amount",
+        "decimal",
+        "The amount being collected."
+      ],
+      [
+        "currency",
+        "string",
+        "ISO currency code of the collection amount."
+      ],
+      [
+        "to_wallet_id",
+        "uuid",
+        "Foreign key to `wallets.id`. The wallet the collected funds are credited to."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the collection was created."
+      ],
+      [
+        "updated_at",
+        "timestamp",
+        "Timestamp of the most recent state change."
+      ]
+    ],
+    "model": "stg_payments__collections"
+  },
+  "transactions_disbursement": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique disbursement identifier."
+      ],
+      [
+        "transaction_id",
+        "uuid",
+        "Foreign key to `transactions_transaction.id`."
+      ],
+      [
+        "state",
+        "string",
+        "Disbursement state. Values: `CREATED`, `READY`, `PREPARED`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `REVERSED`, `AMBIGUOUS`."
+      ],
+      [
+        "amount",
+        "decimal",
+        "The amount being disbursed in the destination currency."
+      ],
+      [
+        "currency",
+        "string",
+        "ISO currency code of the disbursement amount."
+      ],
+      [
+        "recipient_id",
+        "uuid",
+        "Foreign key to `transactions_recipient.id`."
+      ],
+      [
+        "recipient_account_id",
+        "uuid",
+        "Foreign key to `transactions_recipient_account.id`. The specific payment destination."
+      ],
+      [
+        "provider_name",
+        "string",
+        "The name of the payout provider handling this disbursement (e.g. `THUNES`, `TERRAPAY`, `CELLULANT`)."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the disbursement was created."
+      ],
+      [
+        "updated_at",
+        "timestamp",
+        "Timestamp of the most recent state change."
+      ]
+    ],
+    "model": "stg_payments__disbursements"
+  },
+  "disbursement_attempts": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique attempt identifier."
+      ],
+      [
+        "disbursement_id",
+        "uuid",
+        "Foreign key to `transactions_disbursement.id`."
+      ],
+      [
+        "state",
+        "string",
+        "Attempt state. Values: `CREATED`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `REVERSED`, `AMBIGUOUS`."
+      ],
+      [
+        "provider_name",
+        "string",
+        "The payout provider used for this attempt."
+      ],
+      [
+        "provider_id",
+        "string",
+        "The provider's internal reference for this attempt."
+      ],
+      [
+        "selection_reason",
+        "string",
+        "How this provider was chosen for the attempt. Values: `PREDEFINED`, `PRIORITY_ORDER`, `SMART_ROUTING`, `PROBING`."
+      ],
+      [
+        "provider_error_category",
+        "string",
+        "Standardised classification of the provider failure reason. Null on success."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the attempt was initiated."
+      ],
+      [
+        "last_updated_at",
+        "timestamp",
+        "Timestamp of the most recent state change."
+      ],
+      [
+        "eta",
+        "timestamp",
+        "Estimated time of arrival for the payout."
+      ],
+      [
+        "max_eta",
+        "timestamp",
+        "Maximum expected delivery time. Used for SLA monitoring."
+      ],
+      [
+        "error",
+        "text",
+        "Error message from the system, if the attempt failed. Null on success."
+      ],
+      [
+        "provider_error",
+        "text",
+        "Error message returned by the provider, if any. Null on success."
+      ],
+      [
+        "receipt_number",
+        "string",
+        "Provider-issued receipt or confirmation number. Null until completed."
+      ],
+      [
+        "psp_account_id",
+        "uuid",
+        "The PSP (payment service provider) account used for routing."
+      ]
+    ],
+    "model": "stg_payments__attempts"
+  },
+  "transactions_recipient": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique recipient identifier."
+      ],
+      [
+        "account_id",
+        "uuid",
+        "Foreign key to `users_account.id`. The account that created this recipient."
+      ],
+      [
+        "first_name",
+        "string",
+        "The recipient's first name."
+      ],
+      [
+        "last_name",
+        "string",
+        "The recipient's last name."
+      ],
+      [
+        "type",
+        "string",
+        "Recipient type. Values: `INDIVIDUAL`, `BUSINESS`."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the recipient was created."
+      ],
+      [
+        "updated_at",
+        "timestamp",
+        "Timestamp of the most recent update."
+      ]
+    ],
+    "model": "stg_payments__recipients"
+  },
+  "transactions_recipient_account": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique recipient account identifier."
+      ],
+      [
+        "recipient_id",
+        "uuid",
+        "Foreign key to `transactions_recipient.id`."
+      ],
+      [
+        "type",
+        "string",
+        "Payment destination type. Values: `MOBILE_MONEY`, `BANK_ACCOUNT`, `UPI`, `BUY_GOODS`, `PAY_BILL`, `PEER_TO_PEER`."
+      ],
+      [
+        "country",
+        "string",
+        "ISO country code of the recipient's country."
+      ],
+      [
+        "currency",
+        "string",
+        "ISO currency code of the destination currency."
+      ],
+      [
+        "phone_number",
+        "string",
+        "Recipient's phone number (for mobile money). Null for non-mobile-money types."
+      ],
+      [
+        "operator",
+        "string",
+        "Mobile money operator name (e.g. `MPESA`, `AIRTEL`, `MTN`). Null for non-mobile-money types."
+      ],
+      [
+        "account_number",
+        "string",
+        "Bank account number or identifier. Null for non-bank types."
+      ],
+      [
+        "bank_code",
+        "string",
+        "Bank identifier code. Null for non-bank types."
+      ],
+      [
+        "bank_name",
+        "string",
+        "Name of the bank. Null for non-bank types."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the recipient account was created."
+      ],
+      [
+        "updated_at",
+        "timestamp",
+        "Timestamp of the most recent update."
+      ]
+    ],
+    "model": "stg_payments__recipient_accounts"
+  },
+  "tasks_task": {
+    "source": "payments",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique task identifier."
+      ],
+      [
+        "service",
+        "string",
+        "The service that created the task. Values: `fincrime`, `compliance`, `support`."
+      ],
+      [
+        "type",
+        "string",
+        "Task type, specific to the service (e.g. `user_review`, `transaction_review`, `escalation`)."
+      ],
+      [
+        "state",
+        "string",
+        "Task state. Values: `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CANCELLED`."
+      ],
+      [
+        "priority",
+        "string",
+        "Priority level. Values: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`."
+      ],
+      [
+        "staff_id",
+        "uuid",
+        "The staff member who created the task. Null for system-generated tasks."
+      ],
+      [
+        "assignee_id",
+        "uuid",
+        "The staff member currently assigned to the task. Null if unassigned."
+      ],
+      [
+        "associated_ids",
+        "array of strings",
+        "Array of entity IDs related to the task. Index 0 is typically the primary entity (user_id or transaction_id). Index 2 (when present) is the user_id for transaction tasks."
+      ],
+      [
+        "content",
+        "json",
+        "Task content and context. Contains keys like `disbursement_id`, `account_id`, `provider_name` depending on the task type."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the task was created."
+      ],
+      [
+        "last_updated_at",
+        "timestamp",
+        "Timestamp of the most recent update."
+      ],
+      [
+        "resolution",
+        "string",
+        "Resolution outcome. Values: `APPROVED`, `REJECTED`, `ESCALATED`. Null while open."
+      ]
+    ],
+    "model": "stg_payments__tasks"
+  },
+  "rules": {
+    "source": "fincrime",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique rule version identifier."
+      ],
+      [
+        "name",
+        "string",
+        "Machine-readable rule name (e.g. `high_value_transaction_check`)."
+      ],
+      [
+        "title",
+        "string",
+        "Human-readable rule title."
+      ],
+      [
+        "description",
+        "string",
+        "Detailed description of what the rule checks."
+      ],
+      [
+        "type",
+        "string",
+        "Rule type (e.g. `THRESHOLD`, `PATTERN`, `LIST_CHECK`)."
+      ],
+      [
+        "category",
+        "string",
+        "Rule category (e.g. `AML`, `FRAUD`, `SANCTIONS`)."
+      ],
+      [
+        "team",
+        "string",
+        "The team responsible for this rule."
+      ],
+      [
+        "condition",
+        "text",
+        "The rule's condition expression."
+      ],
+      [
+        "version",
+        "integer",
+        "Version number. Higher is newer."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when this version was created."
+      ],
+      [
+        "updated_at",
+        "timestamp",
+        "Timestamp of the most recent update."
+      ],
+      [
+        "deleted_at",
+        "timestamp",
+        "Timestamp when this rule version was soft-deleted. Null if active."
+      ]
+    ],
+    "model": "stg_fincrime__rules"
+  },
+  "workflows": {
+    "source": "fincrime",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique workflow version identifier."
+      ],
+      [
+        "name",
+        "string",
+        "Machine-readable workflow name."
+      ],
+      [
+        "title",
+        "string",
+        "Human-readable workflow title."
+      ],
+      [
+        "type",
+        "string",
+        "Workflow type (e.g. `PRE_TRANSACTION`, `POST_TRANSACTION`, `USER_ONBOARDING`)."
+      ],
+      [
+        "config",
+        "json",
+        "Workflow configuration. Contains a `nodes` array where each node has `type` (e.g. `RULE`) and `config.rule_id` referencing a rule."
+      ],
+      [
+        "version",
+        "integer",
+        "Version number. Higher is newer."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when this version was created."
+      ],
+      [
+        "updated_at",
+        "timestamp",
+        "Timestamp of the most recent update."
+      ],
+      [
+        "deleted_at",
+        "timestamp",
+        "Timestamp when this workflow version was soft-deleted. Null if active."
+      ]
+    ],
+    "model": "stg_fincrime__workflows"
+  },
+  "workflow_executions": {
+    "source": "fincrime",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique execution identifier."
+      ],
+      [
+        "workflow_id",
+        "uuid",
+        "Foreign key to `workflows.id`. The workflow that was executed."
+      ],
+      [
+        "result",
+        "string",
+        "Overall execution result. Values: `PASS`, `FAIL`, `ERROR`."
+      ],
+      [
+        "context",
+        "json",
+        "The business context for this execution. Contains `user_id` (string, references `Source 1 users.id`) and `transaction_id` (string, references `Source 1 transactions_transaction.id`). One or both may be present depending on the trigger event."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the execution was initiated."
+      ],
+      [
+        "started_at",
+        "timestamp",
+        "Timestamp when evaluation began."
+      ],
+      [
+        "ended_at",
+        "timestamp",
+        "Timestamp when evaluation completed."
+      ],
+      [
+        "error",
+        "text",
+        "Error details if the execution failed due to a system error. Null on success."
+      ],
+      [
+        "actions",
+        "json",
+        "Array of actions triggered by this execution (e.g. `BLOCK_USER`, `HOLD_TRANSACTION`, `CREATE_TASK`)."
+      ]
+    ],
+    "model": "stg_fincrime__workflow_executions"
+  },
+  "rule_executions": {
+    "source": "fincrime",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique rule execution identifier."
+      ],
+      [
+        "rule_id",
+        "uuid",
+        "Foreign key to `rules.id`. The rule that was evaluated."
+      ],
+      [
+        "workflow_execution_id",
+        "uuid",
+        "Foreign key to `workflow_executions.id`. The parent workflow execution."
+      ],
+      [
+        "result",
+        "string",
+        "Rule evaluation result. Values: `PASS`, `FAIL`, `ERROR`."
+      ],
+      [
+        "condition_result",
+        "string",
+        "The raw result of the condition evaluation."
+      ],
+      [
+        "context",
+        "json",
+        "Same structure as `workflow_executions.context`. Contains `user_id` and/or `transaction_id`."
+      ],
+      [
+        "created_at",
+        "timestamp",
+        "Timestamp when the rule evaluation started."
+      ],
+      [
+        "started_at",
+        "timestamp",
+        "Timestamp when condition evaluation began."
+      ],
+      [
+        "ended_at",
+        "timestamp",
+        "Timestamp when condition evaluation completed."
+      ],
+      [
+        "error",
+        "text",
+        "Error details if the rule evaluation failed. Null on success."
+      ],
+      [
+        "review",
+        "string",
+        "Review status, if the rule execution was reviewed. Values: `PENDING`, `REVIEWED`. Null if no review is required."
+      ],
+      [
+        "review_comment",
+        "text",
+        "Comment left by the reviewer. Null if not reviewed."
+      ],
+      [
+        "reviewer_id",
+        "uuid",
+        "The staff member who reviewed this execution. Null if not reviewed."
+      ],
+      [
+        "reviewed_at",
+        "timestamp",
+        "Timestamp when the review was completed. Null if not reviewed."
+      ]
+    ],
+    "model": "stg_fincrime__rule_executions"
+  },
+  "rule_execution_reviews": {
+    "source": "fincrime",
+    "columns": [
+      [
+        "id",
+        "uuid",
+        "Primary key. Unique review identifier."
+      ],
+      [
+        "rule_execution_id",
+        "uuid",
+        "Foreign key to `rule_executions.id`."
+      ],
+      [
+        "reviewer_id",
+        "uuid",
+        "The staff member who performed the review."
+      ],
+      [
+        "review",
+        "string",
+        "Review determination. Values: `TRUE_POSITIVE`, `FALSE_POSITIVE`, `INCONCLUSIVE`."
+      ],
+      [
+        "review_comment",
+        "text",
+        "Detailed comment explaining the reviewer's determination."
+      ],
+      [
+        "reviewed_at",
+        "timestamp",
+        "Timestamp when the review was completed."
+      ]
+    ],
+    "model": "stg_fincrime__reviews"
+  },
+  "events": {
+    "source": "amplitude",
+    "columns": [
+      [
+        "event_id",
+        "string",
+        "Primary key. Unique event identifier assigned by Amplitude."
+      ],
+      [
+        "user_id",
+        "string",
+        "The NALA user ID (matches `Source 1 users.id`). Null for anonymous events before the user logs in or creates an account."
+      ],
+      [
+        "device_id",
+        "string",
+        "Unique device identifier. Present for all events including anonymous ones."
+      ],
+      [
+        "event_type",
+        "string",
+        "The event name, using dot-notation (e.g. `sign_up.started`, `sign_up.completed`, `kyc_step.completed`, `send_money_screen.started`, `transaction.completed`, `open_wallet_account.completed`, `app.opened`)."
+      ],
+      [
+        "event_time",
+        "timestamp",
+        "Timestamp of the event on the client device."
+      ],
+      [
+        "event_properties",
+        "json",
+        "Event-specific properties. Structure varies by event type."
+      ],
+      [
+        "user_properties",
+        "json",
+        "User properties at the time of the event. May contain `email`, `account_status`, `plan_type`, `signup_date`."
+      ],
+      [
+        "platform",
+        "string",
+        "Client platform. Values: `iOS`, `Android`."
+      ],
+      [
+        "os_name",
+        "string",
+        "Operating system name."
+      ],
+      [
+        "country",
+        "string",
+        "ISO country code derived from the user's IP address."
+      ],
+      [
+        "city",
+        "string",
+        "City name derived from IP geolocation."
+      ],
+      [
+        "app_version",
+        "string",
+        "Version of the NALA app that generated the event."
+      ],
+      [
+        "session_id",
+        "bigint",
+        "Session identifier grouping events within a single app session."
+      ],
+      [
+        "server_upload_time",
+        "timestamp",
+        "Timestamp when Amplitude's servers received the event."
+      ]
+    ],
+    "model": "stg_amplitude__events"
+  }
+}

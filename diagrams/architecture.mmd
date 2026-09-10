@@ -1,0 +1,15 @@
+flowchart LR
+  P[Payments: 9 tables] --> CDC[StreamServe CDC]
+  F[Fincrime: 5 tables] --> CDC
+  A[Amplitude events] --> B[Fivetran daily sync]
+  CDC --> RAW[RAW: current-row replica contract]
+  B --> RAW
+  RAW --> STG[15 typed staging views]
+  STG --> INT[4 intermediate views]
+  INT --> MARTS[9 production marts]
+  STG --> MARTS
+  FX[Additional approved USD rate dependency] -.-> MARTS
+  STG --> POC[3 isolated exploratory models]
+  MARTS --> SEM[6 semantic models / 5 required metrics + helpers]
+  POC -.-> SEM
+  SEM --> HEX[Planned Hex consumers]

@@ -1,0 +1,21 @@
+name: validate-assessment
+on: [pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  offline-and-parse:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dbt_project
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: python validation/check_project.py
+      - run: python -m pytest validation -q
+      - run: dbt parse --profiles-dir ci --no-partial-parse
+# Warehouse CI belongs in an approved dbt Cloud CI job using an isolated schema,
+# a read-only raw role, a reviewed production manifest, and explicit data tests.

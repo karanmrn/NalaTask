@@ -1,0 +1,727 @@
+version: 2
+sources:
+- name: payments
+  description: Source 1 from the assessment. Current-row PostgreSQL replica via StreamServe; connector metadata
+    contract is not supplied.
+  database: '{{ var(''raw_database'', ''RAW'') }}'
+  schema: '{{ var(''payments_raw_schema'', ''PAYMENTS'') }}'
+  config:
+    freshness: null
+    meta:
+      connector: StreamServe
+      loaded_at_contract: Not supplied. Use connector sync/CDC checkpoints; do not substitute business event
+        timestamps.
+  tables:
+  - name: users
+    description: The primary user table. One row per registered user.
+    columns:
+    - name: id
+      description: Primary key. Unique identifier for the user.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: status
+      description: 'Current account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`, `PENDING`.'
+      data_type: string
+    - name: source
+      description: Object describing how the user was acquired. Contains a `link` key with the referral or
+        attribution URL.
+      data_type: json
+    - name: sender_country
+      description: ISO country code for the country the user sends money from (e.g. `GB`, `US`, `DE`).
+      data_type: string
+    - name: created
+      description: Timestamp when the user registered.
+      data_type: timestamp
+    - name: allowed
+      description: Timestamp when the user was approved to transact (post-KYC). Null if not yet approved.
+      data_type: timestamp
+    - name: client_properties
+      description: Device and client metadata set by the mobile app.
+      data_type: json
+    - name: used_invitation_code_id
+      description: Foreign key to the invitation code used at signup. Null if no code was used.
+      data_type: uuid
+    - name: profile_picture
+      description: URL to the user's profile image. Null if not set.
+      data_type: string
+    - name: usage
+      description: Object containing user usage preferences. Contains `sender_country` and `recipient_countries`
+        keys.
+      data_type: json
+  - name: users_account
+    description: Account records. Each user has one or more accounts (e.g. personal account, business account).
+      An account is the entity that owns transactions.
+    columns:
+    - name: id
+      description: Primary key. Unique account identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: owner_id
+      description: Foreign key to `users.id`. The user who owns this account.
+      data_type: uuid
+    - name: name
+      description: Display name for the account.
+      data_type: string
+    - name: type
+      description: 'Account type. Values: `PERSONAL`, `BUSINESS`.'
+      data_type: string
+    - name: status
+      description: 'Account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`.'
+      data_type: string
+    - name: features
+      description: Feature flags and capabilities enabled for this account.
+      data_type: json
+    - name: created
+      description: Timestamp when the account was created.
+      data_type: timestamp
+    - name: last_updated
+      description: Timestamp of the most recent update to this record.
+      data_type: timestamp
+    - name: profile_id
+      description: Reference to the account's profile configuration.
+      data_type: uuid
+    - name: limit_level
+      description: The transaction limit tier assigned to this account.
+      data_type: string
+    - name: client_properties
+      description: Client-side metadata.
+      data_type: json
+    - name: deleted
+      description: Timestamp when the account was soft-deleted by the application. Null if the account is active.
+      data_type: timestamp
+  - name: transactions_transaction
+    description: The core transaction table. One row per transaction initiated by a user. A transaction represents
+      a cross-border money transfer.
+    columns:
+    - name: id
+      description: Primary key. Unique transaction identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: user_id
+      description: Foreign key to `users.id`. The user who initiated the transaction.
+      data_type: uuid
+    - name: account_id
+      description: Foreign key to `users_account.id`. The account the transaction belongs to.
+      data_type: uuid
+    - name: type
+      description: 'Transaction type. Values: `COLLECTION`, `CONVERSION`, `DISBURSEMENT`, `COLLECTION_CONVERSION`,
+        `CONVERSION_DISBURSEMENT`, `COLLECTION_CONVERSION_DISBURSEMENT`, `EARNED_REWARD`, `REVERSAL`, `INCOMING`,
+        `INCOMING_PEER_TO_PEER`, `OUTGOING_PEER_TO_PEER`, `CONVERSION_OUTGOING_PEER_TO_PEER`, `INCOMING_COLLECTION`.'
+      data_type: string
+    - name: state
+      description: 'Current transaction state. Values: `CREATED`, `COLLECTION_IN_PROGRESS`, `CONVERSION_IN_PROGRESS`,
+        `DISBURSEMENT_IN_PROGRESS`, `WORKFLOW_IN_PROGRESS`, `WAITING_ON_WORKFLOW`, `WAITING_ON_RECIPIENT_APPROVAL`,
+        `ON_HOLD`, `PENDING_CAPTURE`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`, `REJECTED`, `REFUNDED`,
+        `REVERSED_TO_WALLET`, `VOIDED`.'
+      data_type: string
+    - name: sent_amount
+      description: The amount the sender sent, in `sent_currency`.
+      data_type: decimal
+    - name: sent_currency
+      description: ISO currency code of the sending currency (e.g. `GBP`, `USD`, `EUR`).
+      data_type: string
+    - name: received_amount
+      description: The amount the recipient receives, in `received_currency`.
+      data_type: decimal
+    - name: received_currency
+      description: ISO currency code of the receiving currency (e.g. `KES`, `TZS`, `NGN`, `UGX`).
+      data_type: string
+    - name: exchange_rate
+      description: The exchange rate applied to this transaction (1 unit of sent_currency = exchange_rate units
+        of received_currency).
+      data_type: decimal
+    - name: source_amount
+      description: The original amount before fees, in the sending currency.
+      data_type: decimal
+    - name: recipient_id
+      description: Foreign key to `transactions_recipient.id`. The recipient of this transaction. Null for
+        non-disbursement types.
+      data_type: uuid
+    - name: recipient_account_id
+      description: Foreign key to `transactions_recipient_account.id`. The specific payment destination. Null
+        for non-disbursement types.
+      data_type: uuid
+    - name: workflow_id
+      description: Foreign key to the approval workflow, if the transaction requires one. Null for most transactions.
+      data_type: uuid
+    - name: created_at
+      description: Timestamp when the transaction was created.
+      data_type: timestamp
+    - name: updated_at
+      description: Timestamp of the most recent state change.
+      data_type: timestamp
+    - name: expires_at
+      description: Timestamp when the transaction offer expires if not completed.
+      data_type: timestamp
+    - name: memo
+      description: Optional note from the sender to the recipient.
+      data_type: string
+    - name: purpose
+      description: 'Purpose of the remittance. Values: `REMITTANCE`, `SALARY_AND_WAGES`, `GOODS_PURCHASE`,
+        `SERVICES_PAYMENT`, `BILLS_PAYMENT`, `P2P_TRANSFER`.'
+      data_type: string
+    - name: from_wallet_id
+      description: Foreign key to `wallets.id`. The wallet the funds are collected from. Null for card-funded
+        transactions.
+      data_type: uuid
+    - name: to_wallet_id
+      description: Foreign key to `wallets.id`. The wallet the funds are disbursed to. Null for bank/mobile
+        money payouts.
+      data_type: uuid
+    - name: summary
+      description: 'Structured summary of the transaction. Contains nested objects: `original.source_amount.amount`
+        (float, the pre-fee amount), `fees` (array of fee objects, each with `definition.label` and `definition.kind`).'
+      data_type: json
+    - name: metadata
+      description: Provider-specific metadata. Structure varies by payment method.
+      data_type: json
+    - name: fee_label
+      description: Display label for the primary fee (e.g. `Transfer fee`).
+      data_type: string
+    - name: fee_kind
+      description: Fee classification (e.g. `FIXED`, `PERCENTAGE`).
+      data_type: string
+  - name: transactions_collection
+    description: Collection records. Each transaction with a collection leg (types containing `COLLECTION`)
+      has one collection record, representing the inbound money movement — how funds are collected from the
+      sender.
+    columns:
+    - name: id
+      description: Primary key. Unique collection identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: transaction_id
+      description: Foreign key to `transactions_transaction.id`.
+      data_type: uuid
+    - name: account_id
+      description: Foreign key to `users_account.id`. The account being collected for.
+      data_type: uuid
+    - name: state
+      description: 'Collection state. Values: `CREATED`, `STARTED`, `WAITING_ON_CUSTOMER`, `WAITING_ON_PROVIDER`,
+        `COMPLETED`, `FAILED`, `CANCELLED`, `REFUNDED`, `PENDING_CAPTURE`, `CAPTURE_FAILED`, `VOIDED`.'
+      data_type: string
+    - name: amount
+      description: The amount being collected.
+      data_type: decimal
+    - name: currency
+      description: ISO currency code of the collection amount.
+      data_type: string
+    - name: to_wallet_id
+      description: Foreign key to `wallets.id`. The wallet the collected funds are credited to.
+      data_type: uuid
+    - name: created_at
+      description: Timestamp when the collection was created.
+      data_type: timestamp
+    - name: updated_at
+      description: Timestamp of the most recent state change.
+      data_type: timestamp
+  - name: transactions_disbursement
+    description: Disbursement records. Each transaction with a disbursement leg (types containing `DISBURSEMENT`)
+      has one disbursement, which represents the payout leg of the money transfer. The disbursement is routed
+      to a provider for delivery.
+    columns:
+    - name: id
+      description: Primary key. Unique disbursement identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: transaction_id
+      description: Foreign key to `transactions_transaction.id`.
+      data_type: uuid
+    - name: state
+      description: 'Disbursement state. Values: `CREATED`, `READY`, `PREPARED`, `WAITING_ON_PROVIDER`, `COMPLETED`,
+        `FAILED`, `REVERSED`, `AMBIGUOUS`.'
+      data_type: string
+    - name: amount
+      description: The amount being disbursed in the destination currency.
+      data_type: decimal
+    - name: currency
+      description: ISO currency code of the disbursement amount.
+      data_type: string
+    - name: recipient_id
+      description: Foreign key to `transactions_recipient.id`.
+      data_type: uuid
+    - name: recipient_account_id
+      description: Foreign key to `transactions_recipient_account.id`. The specific payment destination.
+      data_type: uuid
+    - name: provider_name
+      description: The name of the payout provider handling this disbursement (e.g. `THUNES`, `TERRAPAY`, `CELLULANT`).
+      data_type: string
+    - name: created_at
+      description: Timestamp when the disbursement was created.
+      data_type: timestamp
+    - name: updated_at
+      description: Timestamp of the most recent state change.
+      data_type: timestamp
+  - name: disbursement_attempts
+    description: Individual payout attempts. A single disbursement may have multiple attempts if the first
+      provider fails and the system retries with a different provider.
+    columns:
+    - name: id
+      description: Primary key. Unique attempt identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: disbursement_id
+      description: Foreign key to `transactions_disbursement.id`.
+      data_type: uuid
+    - name: state
+      description: 'Attempt state. Values: `CREATED`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `REVERSED`,
+        `AMBIGUOUS`.'
+      data_type: string
+    - name: provider_name
+      description: The payout provider used for this attempt.
+      data_type: string
+    - name: provider_id
+      description: The provider's internal reference for this attempt.
+      data_type: string
+    - name: selection_reason
+      description: 'How this provider was chosen for the attempt. Values: `PREDEFINED`, `PRIORITY_ORDER`, `SMART_ROUTING`,
+        `PROBING`.'
+      data_type: string
+    - name: provider_error_category
+      description: Standardised classification of the provider failure reason. Null on success.
+      data_type: string
+    - name: created_at
+      description: Timestamp when the attempt was initiated.
+      data_type: timestamp
+    - name: last_updated_at
+      description: Timestamp of the most recent state change.
+      data_type: timestamp
+    - name: eta
+      description: Estimated time of arrival for the payout.
+      data_type: timestamp
+    - name: max_eta
+      description: Maximum expected delivery time. Used for SLA monitoring.
+      data_type: timestamp
+    - name: error
+      description: Error message from the system, if the attempt failed. Null on success.
+      data_type: text
+    - name: provider_error
+      description: Error message returned by the provider, if any. Null on success.
+      data_type: text
+    - name: receipt_number
+      description: Provider-issued receipt or confirmation number. Null until completed.
+      data_type: string
+    - name: psp_account_id
+      description: The PSP (payment service provider) account used for routing.
+      data_type: uuid
+  - name: transactions_recipient
+    description: Recipient records. A recipient is a person or business that receives money from a NALA user.
+      Recipients belong to an account and can have one or more recipient accounts (payment destinations).
+    columns:
+    - name: id
+      description: Primary key. Unique recipient identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: account_id
+      description: Foreign key to `users_account.id`. The account that created this recipient.
+      data_type: uuid
+    - name: first_name
+      description: The recipient's first name.
+      data_type: string
+    - name: last_name
+      description: The recipient's last name.
+      data_type: string
+    - name: type
+      description: 'Recipient type. Values: `INDIVIDUAL`, `BUSINESS`.'
+      data_type: string
+    - name: created_at
+      description: Timestamp when the recipient was created.
+      data_type: timestamp
+    - name: updated_at
+      description: Timestamp of the most recent update.
+      data_type: timestamp
+  - name: transactions_recipient_account
+    description: Recipient account records. Each recipient has one or more payment destinations — the specific
+      account, phone number, or address where money is delivered.
+    columns:
+    - name: id
+      description: Primary key. Unique recipient account identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: recipient_id
+      description: Foreign key to `transactions_recipient.id`.
+      data_type: uuid
+    - name: type
+      description: 'Payment destination type. Values: `MOBILE_MONEY`, `BANK_ACCOUNT`, `UPI`, `BUY_GOODS`, `PAY_BILL`,
+        `PEER_TO_PEER`.'
+      data_type: string
+    - name: country
+      description: ISO country code of the recipient's country.
+      data_type: string
+    - name: currency
+      description: ISO currency code of the destination currency.
+      data_type: string
+    - name: phone_number
+      description: Recipient's phone number (for mobile money). Null for non-mobile-money types.
+      data_type: string
+    - name: operator
+      description: Mobile money operator name (e.g. `MPESA`, `AIRTEL`, `MTN`). Null for non-mobile-money types.
+      data_type: string
+    - name: account_number
+      description: Bank account number or identifier. Null for non-bank types.
+      data_type: string
+    - name: bank_code
+      description: Bank identifier code. Null for non-bank types.
+      data_type: string
+    - name: bank_name
+      description: Name of the bank. Null for non-bank types.
+      data_type: string
+    - name: created_at
+      description: Timestamp when the recipient account was created.
+      data_type: timestamp
+    - name: updated_at
+      description: Timestamp of the most recent update.
+      data_type: timestamp
+  - name: tasks_task
+    description: Operational tasks created by various services (fincrime, compliance, customer support). Tasks
+      are assigned to staff for review and resolution.
+    columns:
+    - name: id
+      description: Primary key. Unique task identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: service
+      description: 'The service that created the task. Values: `fincrime`, `compliance`, `support`.'
+      data_type: string
+    - name: type
+      description: Task type, specific to the service (e.g. `user_review`, `transaction_review`, `escalation`).
+      data_type: string
+    - name: state
+      description: 'Task state. Values: `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CANCELLED`.'
+      data_type: string
+    - name: priority
+      description: 'Priority level. Values: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`.'
+      data_type: string
+    - name: staff_id
+      description: The staff member who created the task. Null for system-generated tasks.
+      data_type: uuid
+    - name: assignee_id
+      description: The staff member currently assigned to the task. Null if unassigned.
+      data_type: uuid
+    - name: associated_ids
+      description: Array of entity IDs related to the task. Index 0 is typically the primary entity (user_id
+        or transaction_id). Index 2 (when present) is the user_id for transaction tasks.
+      data_type: array of strings
+    - name: content
+      description: Task content and context. Contains keys like `disbursement_id`, `account_id`, `provider_name`
+        depending on the task type.
+      data_type: json
+    - name: created_at
+      description: Timestamp when the task was created.
+      data_type: timestamp
+    - name: last_updated_at
+      description: Timestamp of the most recent update.
+      data_type: timestamp
+    - name: resolution
+      description: 'Resolution outcome. Values: `APPROVED`, `REJECTED`, `ESCALATED`. Null while open.'
+      data_type: string
+- name: fincrime
+  description: Source 2 from the assessment. Current-row PostgreSQL replica via StreamServe; connector metadata
+    contract is not supplied.
+  database: '{{ var(''raw_database'', ''RAW'') }}'
+  schema: '{{ var(''fincrime_raw_schema'', ''FINCRIME'') }}'
+  config:
+    freshness: null
+    meta:
+      connector: StreamServe
+      loaded_at_contract: Not supplied. Use connector sync/CDC checkpoints; do not substitute business event
+        timestamps.
+  tables:
+  - name: rules
+    description: Rule definitions. Each row is a version of a rule.
+    columns:
+    - name: id
+      description: Primary key. Unique rule version identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: name
+      description: Machine-readable rule name (e.g. `high_value_transaction_check`).
+      data_type: string
+    - name: title
+      description: Human-readable rule title.
+      data_type: string
+    - name: description
+      description: Detailed description of what the rule checks.
+      data_type: string
+    - name: type
+      description: Rule type (e.g. `THRESHOLD`, `PATTERN`, `LIST_CHECK`).
+      data_type: string
+    - name: category
+      description: Rule category (e.g. `AML`, `FRAUD`, `SANCTIONS`).
+      data_type: string
+    - name: team
+      description: The team responsible for this rule.
+      data_type: string
+    - name: condition
+      description: The rule's condition expression.
+      data_type: text
+    - name: version
+      description: Version number. Higher is newer.
+      data_type: integer
+    - name: created_at
+      description: Timestamp when this version was created.
+      data_type: timestamp
+    - name: updated_at
+      description: Timestamp of the most recent update.
+      data_type: timestamp
+    - name: deleted_at
+      description: Timestamp when this rule version was soft-deleted. Null if active.
+      data_type: timestamp
+  - name: workflows
+    description: Workflow definitions. Each workflow is an ordered collection of rules.
+    columns:
+    - name: id
+      description: Primary key. Unique workflow version identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: name
+      description: Machine-readable workflow name.
+      data_type: string
+    - name: title
+      description: Human-readable workflow title.
+      data_type: string
+    - name: type
+      description: Workflow type (e.g. `PRE_TRANSACTION`, `POST_TRANSACTION`, `USER_ONBOARDING`).
+      data_type: string
+    - name: config
+      description: Workflow configuration. Contains a `nodes` array where each node has `type` (e.g. `RULE`)
+        and `config.rule_id` referencing a rule.
+      data_type: json
+    - name: version
+      description: Version number. Higher is newer.
+      data_type: integer
+    - name: created_at
+      description: Timestamp when this version was created.
+      data_type: timestamp
+    - name: updated_at
+      description: Timestamp of the most recent update.
+      data_type: timestamp
+    - name: deleted_at
+      description: Timestamp when this workflow version was soft-deleted. Null if active.
+      data_type: timestamp
+  - name: workflow_executions
+    description: Each row represents one execution of a workflow, triggered by a business event. The `context`
+      column carries the reference back to the entity being evaluated.
+    columns:
+    - name: id
+      description: Primary key. Unique execution identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: workflow_id
+      description: Foreign key to `workflows.id`. The workflow that was executed.
+      data_type: uuid
+    - name: result
+      description: 'Overall execution result. Values: `PASS`, `FAIL`, `ERROR`.'
+      data_type: string
+    - name: context
+      description: The business context for this execution. Contains `user_id` (string, references `Source
+        1 users.id`) and `transaction_id` (string, references `Source 1 transactions_transaction.id`). One
+        or both may be present depending on the trigger event.
+      data_type: json
+    - name: created_at
+      description: Timestamp when the execution was initiated.
+      data_type: timestamp
+    - name: started_at
+      description: Timestamp when evaluation began.
+      data_type: timestamp
+    - name: ended_at
+      description: Timestamp when evaluation completed.
+      data_type: timestamp
+    - name: error
+      description: Error details if the execution failed due to a system error. Null on success.
+      data_type: text
+    - name: actions
+      description: Array of actions triggered by this execution (e.g. `BLOCK_USER`, `HOLD_TRANSACTION`, `CREATE_TASK`).
+      data_type: json
+  - name: rule_executions
+    description: Each row represents the evaluation of a single rule within a workflow execution.
+    columns:
+    - name: id
+      description: Primary key. Unique rule execution identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: rule_id
+      description: Foreign key to `rules.id`. The rule that was evaluated.
+      data_type: uuid
+    - name: workflow_execution_id
+      description: Foreign key to `workflow_executions.id`. The parent workflow execution.
+      data_type: uuid
+    - name: result
+      description: 'Rule evaluation result. Values: `PASS`, `FAIL`, `ERROR`.'
+      data_type: string
+    - name: condition_result
+      description: The raw result of the condition evaluation.
+      data_type: string
+    - name: context
+      description: Same structure as `workflow_executions.context`. Contains `user_id` and/or `transaction_id`.
+      data_type: json
+    - name: created_at
+      description: Timestamp when the rule evaluation started.
+      data_type: timestamp
+    - name: started_at
+      description: Timestamp when condition evaluation began.
+      data_type: timestamp
+    - name: ended_at
+      description: Timestamp when condition evaluation completed.
+      data_type: timestamp
+    - name: error
+      description: Error details if the rule evaluation failed. Null on success.
+      data_type: text
+    - name: review
+      description: 'Review status, if the rule execution was reviewed. Values: `PENDING`, `REVIEWED`. Null
+        if no review is required.'
+      data_type: string
+    - name: review_comment
+      description: Comment left by the reviewer. Null if not reviewed.
+      data_type: text
+    - name: reviewer_id
+      description: The staff member who reviewed this execution. Null if not reviewed.
+      data_type: uuid
+    - name: reviewed_at
+      description: Timestamp when the review was completed. Null if not reviewed.
+      data_type: timestamp
+  - name: rule_execution_reviews
+    description: Dedicated review records for rule executions that required manual assessment. This is separate
+      from the inline review fields on `rule_executions` and represents the formal ops review process.
+    columns:
+    - name: id
+      description: Primary key. Unique review identifier.
+      data_type: uuid
+      data_tests:
+      - not_null
+      - unique
+    - name: rule_execution_id
+      description: Foreign key to `rule_executions.id`.
+      data_type: uuid
+    - name: reviewer_id
+      description: The staff member who performed the review.
+      data_type: uuid
+    - name: review
+      description: 'Review determination. Values: `TRUE_POSITIVE`, `FALSE_POSITIVE`, `INCONCLUSIVE`.'
+      data_type: string
+    - name: review_comment
+      description: Detailed comment explaining the reviewer's determination.
+      data_type: text
+    - name: reviewed_at
+      description: Timestamp when the review was completed.
+      data_type: timestamp
+- name: amplitude
+  description: Source 3 from the assessment. Amplitude via daily Fivetran sync around 06:00 UTC; exploratory.
+  database: '{{ var(''raw_database'', ''RAW'') }}'
+  schema: '{{ var(''amplitude_raw_schema'', ''AMPLITUDE'') }}'
+  config:
+    freshness: null
+    meta:
+      connector: Fivetran
+      loaded_at_contract: Not supplied. Use connector sync/CDC checkpoints; do not substitute business event
+        timestamps.
+  tables:
+  - name: events
+    description: One row per event tracked in the NALA mobile app.
+    columns:
+    - name: event_id
+      description: Primary key. Unique event identifier assigned by Amplitude.
+      data_type: string
+      data_tests:
+      - not_null
+      - unique
+    - name: user_id
+      description: The NALA user ID (matches `Source 1 users.id`). Null for anonymous events before the user
+        logs in or creates an account.
+      data_type: string
+    - name: device_id
+      description: Unique device identifier. Present for all events including anonymous ones.
+      data_type: string
+    - name: event_type
+      description: The event name, using dot-notation (e.g. `sign_up.started`, `sign_up.completed`, `kyc_step.completed`,
+        `send_money_screen.started`, `transaction.completed`, `open_wallet_account.completed`, `app.opened`).
+      data_type: string
+    - name: event_time
+      description: Timestamp of the event on the client device.
+      data_type: timestamp
+    - name: event_properties
+      description: Event-specific properties. Structure varies by event type.
+      data_type: json
+    - name: user_properties
+      description: User properties at the time of the event. May contain `email`, `account_status`, `plan_type`,
+        `signup_date`.
+      data_type: json
+    - name: platform
+      description: 'Client platform. Values: `iOS`, `Android`.'
+      data_type: string
+    - name: os_name
+      description: Operating system name.
+      data_type: string
+    - name: country
+      description: ISO country code derived from the user's IP address.
+      data_type: string
+    - name: city
+      description: City name derived from IP geolocation.
+      data_type: string
+    - name: app_version
+      description: Version of the NALA app that generated the event.
+      data_type: string
+    - name: session_id
+      description: Session identifier grouping events within a single app session.
+      data_type: bigint
+    - name: server_upload_time
+      description: Timestamp when Amplitude's servers received the event.
+      data_type: timestamp
+- name: reference_data
+  description: 'REQUIRED ADDITIONAL INPUT, not provided in the brief: Finance-approved daily USD conversion
+    rates.'
+  database: '{{ var(''raw_database'', ''RAW'') }}'
+  schema: '{{ var(''reference_raw_schema'', ''REFERENCE'') }}'
+  config:
+    freshness: null
+  tables:
+  - name: daily_fx_rates
+    description: 'One approved rate per currency and UTC rate date. Direction: 1 unit of currency = usd_per_unit
+      USD. No invented or forward-filled rates.'
+    columns:
+    - name: rate_date
+      description: Effective UTC business date.
+      data_type: date
+      data_tests:
+      - not_null
+    - name: currency
+      description: ISO sending currency.
+      data_type: varchar
+      data_tests:
+      - not_null
+    - name: usd_per_unit
+      description: USD value of one unit of currency. Must be positive.
+      data_type: number(38,12)
+      data_tests:
+      - not_null
+    - name: rate_source
+      description: Finance-approved rate provenance.
+      data_type: varchar
+      data_tests:
+      - not_null

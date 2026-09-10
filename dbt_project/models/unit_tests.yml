@@ -1,0 +1,133 @@
+version: 2
+unit_tests:
+- name: reviews_include_inconclusive_and_repeated
+  description: Never collapse multiple formal reviews into the last record or drop inconclusive from the denominator.
+  model: fct_rule_reviews
+  given:
+  - input: ref('stg_fincrime__reviews')
+    rows:
+    - review_id: v1
+      rule_execution_id: e1
+      review_determination: FALSE_POSITIVE
+      reviewed_at: '2026-09-01 11:00:00'
+    - review_id: v2
+      rule_execution_id: e1
+      review_determination: INCONCLUSIVE
+      reviewed_at: '2026-09-01 12:00:00'
+  - input: ref('fct_rule_executions')
+    rows:
+    - rule_execution_id: e1
+      rule_id: r1
+      rule_name: check
+      rule_category: AML
+      rule_version: 1
+      created_at: '2026-09-01 10:00:00'
+  expect:
+    rows:
+    - review_id: v1
+      review_count: 1
+      false_positive_count: 1
+      review_seconds: 3600
+    - review_id: v2
+      review_count: 1
+      false_positive_count: 0
+      review_seconds: 7200
+- name: ambiguous_tasks_remain_one_row
+  description: No nearest-row selection hides ambiguity and no fan-out changes the task denominator.
+  model: fct_fincrime_tasks
+  given:
+  - input: ref('int_fincrime_task_context')
+    rows:
+    - task_id: t1
+      task_type: user_review
+      task_state: OPEN
+      resolution: null
+      created_at: '2026-09-01 10:10:00'
+      updated_at: '2026-09-01 10:10:00'
+      user_id: u1
+      transaction_id: null
+      has_context_conflict: false
+  - input: ref('int_task_workflow_candidates')
+    rows:
+    - task_id: t1
+      workflow_execution_id: w1
+    - task_id: t1
+      workflow_execution_id: w2
+  - input: ref('int_workflow_context')
+    rows:
+    - workflow_execution_id: w1
+      workflow_result: FAIL
+    - workflow_execution_id: w2
+      workflow_result: PASS
+  expect:
+    rows:
+    - task_id: t1
+      candidate_count: 2
+      match_status: AMBIGUOUS
+      inferred_workflow_execution_id: null
+      inferred_workflow_result: null
+      task_count: 1
+- name: daily_usd_total_is_all_or_unknown
+  description: A complete local-currency total may exist while the USD total is unavailable.
+  model: agg_transactions_daily
+  given:
+  - input: ref('fct_transactions')
+    rows:
+    - transaction_id: t1
+      transaction_date: '2026-09-01'
+      currency_corridor: GBP-KES
+      sent_currency: GBP
+      transaction_type: DISBURSEMENT
+      is_volume_qualifying: true
+      qualifying_count: 1
+      completed_qualifying_count: 1
+      completed_sent_amount: 100
+      completed_sent_amount_usd: 130
+      is_missing_fx: false
+    - transaction_id: t2
+      transaction_date: '2026-09-01'
+      currency_corridor: GBP-KES
+      sent_currency: GBP
+      transaction_type: DISBURSEMENT
+      is_volume_qualifying: true
+      qualifying_count: 1
+      completed_qualifying_count: 1
+      completed_sent_amount: 50
+      completed_sent_amount_usd: null
+      is_missing_fx: true
+  expect:
+    rows:
+    - completed_transactions: 2
+      completed_sent_amount: 150
+      missing_fx_transactions: 1
+      completed_sent_amount_usd: null
+      transaction_success_rate: 1.0
+- name: provider_rate_uses_all_states
+  description: Pending attempts stay in the success-rate denominator but not completed-duration means.
+  model: agg_provider_daily
+  given:
+  - input: ref('fct_disbursement_attempts')
+    rows:
+    - attempt_date: '2026-09-01'
+      provider_name: P
+      attempt_count: 1
+      completed_attempt_count: 1
+      failed_attempt_count: 0
+      completion_seconds_proxy: 30
+      failure_seconds_proxy: null
+      completion_time_band: UNDER_1_MIN
+    - attempt_date: '2026-09-01'
+      provider_name: P
+      attempt_count: 1
+      completed_attempt_count: 0
+      failed_attempt_count: 0
+      completion_seconds_proxy: null
+      failure_seconds_proxy: null
+      completion_time_band: UNKNOWN
+  expect:
+    rows:
+    - attempts: 2
+      completed_attempts: 1
+      provider_success_rate: 0.5
+      avg_completion_seconds_proxy: 30
+      under_1_min: 1

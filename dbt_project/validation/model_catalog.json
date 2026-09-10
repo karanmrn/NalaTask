@@ -1,0 +1,2599 @@
+{
+  "stg_payments__users": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "user_id",
+        "description": "Primary key. Unique identifier for the user.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "user_status",
+        "description": "Current account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`, `PENDING`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "ACTIVE",
+                  "INACTIVE",
+                  "SUSPENDED",
+                  "PENDING"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "source",
+        "description": "Object describing how the user was acquired. Contains a `link` key with the referral or attribution URL.",
+        "data_type": "variant"
+      },
+      {
+        "name": "sender_country",
+        "description": "ISO country code for the country the user sends money from (e.g. `GB`, `US`, `DE`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "registered_at",
+        "description": "Timestamp when the user registered.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "approved_at",
+        "description": "Timestamp when the user was approved to transact (post-KYC). Null if not yet approved.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "client_properties",
+        "description": "Device and client metadata set by the mobile app.",
+        "data_type": "variant"
+      },
+      {
+        "name": "used_invitation_code_id",
+        "description": "Foreign key to the invitation code used at signup. Null if no code was used.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "profile_picture",
+        "description": "URL to the user's profile image. Null if not set.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "usage",
+        "description": "Object containing user usage preferences. Contains `sender_country` and `recipient_countries` keys.",
+        "data_type": "variant"
+      }
+    ]
+  },
+  "stg_payments__accounts": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "account_id",
+        "description": "Primary key. Unique account identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "owner_user_id",
+        "description": "Foreign key to `users.id`. The user who owns this account.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_payments__users')",
+                "field": "user_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "account_name",
+        "description": "Display name for the account.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "account_type",
+        "description": "Account type. Values: `PERSONAL`, `BUSINESS`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "PERSONAL",
+                  "BUSINESS"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "account_status",
+        "description": "Account status. Values: `ACTIVE`, `INACTIVE`, `SUSPENDED`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "ACTIVE",
+                  "INACTIVE",
+                  "SUSPENDED"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "features",
+        "description": "Feature flags and capabilities enabled for this account.",
+        "data_type": "variant"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the account was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent update to this record.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "profile_id",
+        "description": "Reference to the account's profile configuration.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "limit_level",
+        "description": "The transaction limit tier assigned to this account.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "client_properties",
+        "description": "Client-side metadata.",
+        "data_type": "variant"
+      },
+      {
+        "name": "deleted_at",
+        "description": "Timestamp when the account was soft-deleted by the application. Null if the account is active.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_payments__transactions": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "transaction_id",
+        "description": "Primary key. Unique transaction identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "user_id",
+        "description": "Foreign key to `users.id`. The user who initiated the transaction.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_payments__users')",
+                "field": "user_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "account_id",
+        "description": "Foreign key to `users_account.id`. The account the transaction belongs to.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_payments__accounts')",
+                "field": "account_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "transaction_type",
+        "description": "Transaction type. Values: `COLLECTION`, `CONVERSION`, `DISBURSEMENT`, `COLLECTION_CONVERSION`, `CONVERSION_DISBURSEMENT`, `COLLECTION_CONVERSION_DISBURSEMENT`, `EARNED_REWARD`, `REVERSAL`, `INCOMING`, `INCOMING_PEER_TO_PEER`, `OUTGOING_PEER_TO_PEER`, `CONVERSION_OUTGOING_PEER_TO_PEER`, `INCOMING_COLLECTION`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "COLLECTION",
+                  "CONVERSION",
+                  "DISBURSEMENT",
+                  "COLLECTION_CONVERSION",
+                  "CONVERSION_DISBURSEMENT",
+                  "COLLECTION_CONVERSION_DISBURSEMENT",
+                  "EARNED_REWARD",
+                  "REVERSAL",
+                  "INCOMING",
+                  "INCOMING_PEER_TO_PEER",
+                  "OUTGOING_PEER_TO_PEER",
+                  "CONVERSION_OUTGOING_PEER_TO_PEER",
+                  "INCOMING_COLLECTION"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "transaction_state",
+        "description": "Current transaction state. Values: `CREATED`, `COLLECTION_IN_PROGRESS`, `CONVERSION_IN_PROGRESS`, `DISBURSEMENT_IN_PROGRESS`, `WORKFLOW_IN_PROGRESS`, `WAITING_ON_WORKFLOW`, `WAITING_ON_RECIPIENT_APPROVAL`, `ON_HOLD`, `PENDING_CAPTURE`, `COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`, `REJECTED`, `REFUNDED`, `REVERSED_TO_WALLET`, `VOIDED`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "CREATED",
+                  "COLLECTION_IN_PROGRESS",
+                  "CONVERSION_IN_PROGRESS",
+                  "DISBURSEMENT_IN_PROGRESS",
+                  "WORKFLOW_IN_PROGRESS",
+                  "WAITING_ON_WORKFLOW",
+                  "WAITING_ON_RECIPIENT_APPROVAL",
+                  "ON_HOLD",
+                  "PENDING_CAPTURE",
+                  "COMPLETED",
+                  "FAILED",
+                  "CANCELLED",
+                  "EXPIRED",
+                  "REJECTED",
+                  "REFUNDED",
+                  "REVERSED_TO_WALLET",
+                  "VOIDED"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "sent_amount",
+        "description": "The amount the sender sent, in `sent_currency`.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "sent_currency",
+        "description": "ISO currency code of the sending currency (e.g. `GBP`, `USD`, `EUR`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "received_amount",
+        "description": "The amount the recipient receives, in `received_currency`.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "received_currency",
+        "description": "ISO currency code of the receiving currency (e.g. `KES`, `TZS`, `NGN`, `UGX`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "exchange_rate",
+        "description": "The exchange rate applied to this transaction (1 unit of sent_currency = exchange_rate units of received_currency).",
+        "data_type": "number(38,12)"
+      },
+      {
+        "name": "source_amount",
+        "description": "The original amount before fees, in the sending currency.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "recipient_id",
+        "description": "Foreign key to `transactions_recipient.id`. The recipient of this transaction. Null for non-disbursement types.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "recipient_account_id",
+        "description": "Foreign key to `transactions_recipient_account.id`. The specific payment destination. Null for non-disbursement types.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "workflow_id",
+        "description": "Foreign key to the approval workflow, if the transaction requires one. Null for most transactions.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the transaction was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent state change.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "expires_at",
+        "description": "Timestamp when the transaction offer expires if not completed.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "memo",
+        "description": "Optional note from the sender to the recipient.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "purpose",
+        "description": "Purpose of the remittance. Values: `REMITTANCE`, `SALARY_AND_WAGES`, `GOODS_PURCHASE`, `SERVICES_PAYMENT`, `BILLS_PAYMENT`, `P2P_TRANSFER`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "REMITTANCE",
+                  "SALARY_AND_WAGES",
+                  "GOODS_PURCHASE",
+                  "SERVICES_PAYMENT",
+                  "BILLS_PAYMENT",
+                  "P2P_TRANSFER"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "from_wallet_id",
+        "description": "Foreign key to `wallets.id`. The wallet the funds are collected from. Null for card-funded transactions.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "to_wallet_id",
+        "description": "Foreign key to `wallets.id`. The wallet the funds are disbursed to. Null for bank/mobile money payouts.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "summary",
+        "description": "Structured summary of the transaction. Contains nested objects: `original.source_amount.amount` (float, the pre-fee amount), `fees` (array of fee objects, each with `definition.label` and `definition.kind`).",
+        "data_type": "variant"
+      },
+      {
+        "name": "metadata",
+        "description": "Provider-specific metadata. Structure varies by payment method.",
+        "data_type": "variant"
+      },
+      {
+        "name": "fee_label",
+        "description": "Display label for the primary fee (e.g. `Transfer fee`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "fee_kind",
+        "description": "Fee classification (e.g. `FIXED`, `PERCENTAGE`).",
+        "data_type": "varchar"
+      }
+    ]
+  },
+  "stg_payments__collections": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "collection_id",
+        "description": "Primary key. Unique collection identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "transaction_id",
+        "description": "Foreign key to `transactions_transaction.id`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_payments__transactions')",
+                "field": "transaction_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "account_id",
+        "description": "Foreign key to `users_account.id`. The account being collected for.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "collection_state",
+        "description": "Collection state. Values: `CREATED`, `STARTED`, `WAITING_ON_CUSTOMER`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `CANCELLED`, `REFUNDED`, `PENDING_CAPTURE`, `CAPTURE_FAILED`, `VOIDED`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "CREATED",
+                  "STARTED",
+                  "WAITING_ON_CUSTOMER",
+                  "WAITING_ON_PROVIDER",
+                  "COMPLETED",
+                  "FAILED",
+                  "CANCELLED",
+                  "REFUNDED",
+                  "PENDING_CAPTURE",
+                  "CAPTURE_FAILED",
+                  "VOIDED"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "amount",
+        "description": "The amount being collected.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "currency",
+        "description": "ISO currency code of the collection amount.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "to_wallet_id",
+        "description": "Foreign key to `wallets.id`. The wallet the collected funds are credited to.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the collection was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent state change.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_payments__disbursements": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "disbursement_id",
+        "description": "Primary key. Unique disbursement identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "transaction_id",
+        "description": "Foreign key to `transactions_transaction.id`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_payments__transactions')",
+                "field": "transaction_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "disbursement_state",
+        "description": "Disbursement state. Values: `CREATED`, `READY`, `PREPARED`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `REVERSED`, `AMBIGUOUS`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "CREATED",
+                  "READY",
+                  "PREPARED",
+                  "WAITING_ON_PROVIDER",
+                  "COMPLETED",
+                  "FAILED",
+                  "REVERSED",
+                  "AMBIGUOUS"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "amount",
+        "description": "The amount being disbursed in the destination currency.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "currency",
+        "description": "ISO currency code of the disbursement amount.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "recipient_id",
+        "description": "Foreign key to `transactions_recipient.id`.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "recipient_account_id",
+        "description": "Foreign key to `transactions_recipient_account.id`. The specific payment destination.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "provider_name",
+        "description": "The name of the payout provider handling this disbursement (e.g. `THUNES`, `TERRAPAY`, `CELLULANT`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the disbursement was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent state change.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_payments__attempts": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "attempt_id",
+        "description": "Primary key. Unique attempt identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "disbursement_id",
+        "description": "Foreign key to `transactions_disbursement.id`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_payments__disbursements')",
+                "field": "disbursement_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "attempt_state",
+        "description": "Attempt state. Values: `CREATED`, `WAITING_ON_PROVIDER`, `COMPLETED`, `FAILED`, `REVERSED`, `AMBIGUOUS`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "CREATED",
+                  "WAITING_ON_PROVIDER",
+                  "COMPLETED",
+                  "FAILED",
+                  "REVERSED",
+                  "AMBIGUOUS"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "provider_name",
+        "description": "The payout provider used for this attempt.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "provider_id",
+        "description": "The provider's internal reference for this attempt.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "selection_reason",
+        "description": "How this provider was chosen for the attempt. Values: `PREDEFINED`, `PRIORITY_ORDER`, `SMART_ROUTING`, `PROBING`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "PREDEFINED",
+                  "PRIORITY_ORDER",
+                  "SMART_ROUTING",
+                  "PROBING"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "provider_error_category",
+        "description": "Standardised classification of the provider failure reason. Null on success.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the attempt was initiated.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent state change.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "eta",
+        "description": "Estimated time of arrival for the payout.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "max_eta",
+        "description": "Maximum expected delivery time. Used for SLA monitoring.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "error",
+        "description": "Error message from the system, if the attempt failed. Null on success.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "provider_error",
+        "description": "Error message returned by the provider, if any. Null on success.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "receipt_number",
+        "description": "Provider-issued receipt or confirmation number. Null until completed.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "psp_account_id",
+        "description": "The PSP (payment service provider) account used for routing.",
+        "data_type": "varchar"
+      }
+    ]
+  },
+  "stg_payments__recipients": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "recipient_id",
+        "description": "Primary key. Unique recipient identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "account_id",
+        "description": "Foreign key to `users_account.id`. The account that created this recipient.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "first_name",
+        "description": "The recipient's first name.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "last_name",
+        "description": "The recipient's last name.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "recipient_type",
+        "description": "Recipient type. Values: `INDIVIDUAL`, `BUSINESS`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "INDIVIDUAL",
+                  "BUSINESS"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the recipient was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent update.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_payments__recipient_accounts": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "recipient_account_id",
+        "description": "Primary key. Unique recipient account identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "recipient_id",
+        "description": "Foreign key to `transactions_recipient.id`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_payments__recipients')",
+                "field": "recipient_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "destination_type",
+        "description": "Payment destination type. Values: `MOBILE_MONEY`, `BANK_ACCOUNT`, `UPI`, `BUY_GOODS`, `PAY_BILL`, `PEER_TO_PEER`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "MOBILE_MONEY",
+                  "BANK_ACCOUNT",
+                  "UPI",
+                  "BUY_GOODS",
+                  "PAY_BILL",
+                  "PEER_TO_PEER"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "country",
+        "description": "ISO country code of the recipient's country.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "currency",
+        "description": "ISO currency code of the destination currency.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "phone_number",
+        "description": "Recipient's phone number (for mobile money). Null for non-mobile-money types.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "operator",
+        "description": "Mobile money operator name (e.g. `MPESA`, `AIRTEL`, `MTN`). Null for non-mobile-money types.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "account_number",
+        "description": "Bank account number or identifier. Null for non-bank types.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "bank_code",
+        "description": "Bank identifier code. Null for non-bank types.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "bank_name",
+        "description": "Name of the bank. Null for non-bank types.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the recipient account was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent update.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_payments__tasks": {
+    "folder": "staging/payments",
+    "columns": [
+      {
+        "name": "task_id",
+        "description": "Primary key. Unique task identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "service",
+        "description": "The service that created the task. Values: `fincrime`, `compliance`, `support`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "fincrime",
+                  "compliance",
+                  "support"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "task_type",
+        "description": "Task type, specific to the service (e.g. `user_review`, `transaction_review`, `escalation`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "task_state",
+        "description": "Task state. Values: `OPEN`, `IN_PROGRESS`, `RESOLVED`, `CANCELLED`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "OPEN",
+                  "IN_PROGRESS",
+                  "RESOLVED",
+                  "CANCELLED"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "priority",
+        "description": "Priority level. Values: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH",
+                  "CRITICAL"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "staff_id",
+        "description": "The staff member who created the task. Null for system-generated tasks.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "assignee_id",
+        "description": "The staff member currently assigned to the task. Null if unassigned.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "associated_ids",
+        "description": "Array of entity IDs related to the task. Index 0 is typically the primary entity (user_id or transaction_id). Index 2 (when present) is the user_id for transaction tasks.",
+        "data_type": "variant"
+      },
+      {
+        "name": "content",
+        "description": "Task content and context. Contains keys like `disbursement_id`, `account_id`, `provider_name` depending on the task type.",
+        "data_type": "variant"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the task was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent update.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "resolution",
+        "description": "Resolution outcome. Values: `APPROVED`, `REJECTED`, `ESCALATED`. Null while open.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "APPROVED",
+                  "REJECTED",
+                  "ESCALATED"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "stg_fincrime__rules": {
+    "folder": "staging/fincrime",
+    "columns": [
+      {
+        "name": "rule_id",
+        "description": "Primary key. Unique rule version identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "rule_name",
+        "description": "Machine-readable rule name (e.g. `high_value_transaction_check`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "title",
+        "description": "Human-readable rule title.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "description",
+        "description": "Detailed description of what the rule checks.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "rule_type",
+        "description": "Rule type (e.g. `THRESHOLD`, `PATTERN`, `LIST_CHECK`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "rule_category",
+        "description": "Rule category (e.g. `AML`, `FRAUD`, `SANCTIONS`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "team",
+        "description": "The team responsible for this rule.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "condition",
+        "description": "The rule's condition expression.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "rule_version",
+        "description": "Version number. Higher is newer.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when this version was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent update.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "deleted_at",
+        "description": "Timestamp when this rule version was soft-deleted. Null if active.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_fincrime__workflows": {
+    "folder": "staging/fincrime",
+    "columns": [
+      {
+        "name": "workflow_id",
+        "description": "Primary key. Unique workflow version identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "workflow_name",
+        "description": "Machine-readable workflow name.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "title",
+        "description": "Human-readable workflow title.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "workflow_type",
+        "description": "Workflow type (e.g. `PRE_TRANSACTION`, `POST_TRANSACTION`, `USER_ONBOARDING`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "config",
+        "description": "Workflow configuration. Contains a `nodes` array where each node has `type` (e.g. `RULE`) and `config.rule_id` referencing a rule.",
+        "data_type": "variant"
+      },
+      {
+        "name": "workflow_version",
+        "description": "Version number. Higher is newer.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when this version was created.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Timestamp of the most recent update.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "deleted_at",
+        "description": "Timestamp when this workflow version was soft-deleted. Null if active.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_fincrime__workflow_executions": {
+    "folder": "staging/fincrime",
+    "columns": [
+      {
+        "name": "workflow_execution_id",
+        "description": "Primary key. Unique execution identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "workflow_id",
+        "description": "Foreign key to `workflows.id`. The workflow that was executed.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_fincrime__workflows')",
+                "field": "workflow_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "workflow_result",
+        "description": "Overall execution result. Values: `PASS`, `FAIL`, `ERROR`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "PASS",
+                  "FAIL",
+                  "ERROR"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "context",
+        "description": "The business context for this execution. Contains `user_id` (string, references `Source 1 users.id`) and `transaction_id` (string, references `Source 1 transactions_transaction.id`). One or both may be present depending on the trigger event.",
+        "data_type": "variant"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the execution was initiated.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "started_at",
+        "description": "Timestamp when evaluation began.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "ended_at",
+        "description": "Timestamp when evaluation completed.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "error",
+        "description": "Error details if the execution failed due to a system error. Null on success.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "actions",
+        "description": "Array of actions triggered by this execution (e.g. `BLOCK_USER`, `HOLD_TRANSACTION`, `CREATE_TASK`).",
+        "data_type": "variant"
+      }
+    ]
+  },
+  "stg_fincrime__rule_executions": {
+    "folder": "staging/fincrime",
+    "columns": [
+      {
+        "name": "rule_execution_id",
+        "description": "Primary key. Unique rule execution identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "rule_id",
+        "description": "Foreign key to `rules.id`. The rule that was evaluated.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_fincrime__rules')",
+                "field": "rule_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "workflow_execution_id",
+        "description": "Foreign key to `workflow_executions.id`. The parent workflow execution.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_fincrime__workflow_executions')",
+                "field": "workflow_execution_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "rule_result",
+        "description": "Rule evaluation result. Values: `PASS`, `FAIL`, `ERROR`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "PASS",
+                  "FAIL",
+                  "ERROR"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "condition_result",
+        "description": "The raw result of the condition evaluation.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "context",
+        "description": "Same structure as `workflow_executions.context`. Contains `user_id` and/or `transaction_id`.",
+        "data_type": "variant"
+      },
+      {
+        "name": "created_at",
+        "description": "Timestamp when the rule evaluation started.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "started_at",
+        "description": "Timestamp when condition evaluation began.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "ended_at",
+        "description": "Timestamp when condition evaluation completed.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "error",
+        "description": "Error details if the rule evaluation failed. Null on success.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "review",
+        "description": "Review status, if the rule execution was reviewed. Values: `PENDING`, `REVIEWED`. Null if no review is required.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "PENDING",
+                  "REVIEWED"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "review_comment",
+        "description": "Comment left by the reviewer. Null if not reviewed.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "reviewer_id",
+        "description": "The staff member who reviewed this execution. Null if not reviewed.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "reviewed_at",
+        "description": "Timestamp when the review was completed. Null if not reviewed.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_fincrime__reviews": {
+    "folder": "staging/fincrime",
+    "columns": [
+      {
+        "name": "review_id",
+        "description": "Primary key. Unique review identifier.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "rule_execution_id",
+        "description": "Foreign key to `rule_executions.id`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "relationships": {
+              "arguments": {
+                "to": "ref('stg_fincrime__rule_executions')",
+                "field": "rule_execution_id"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "reviewer_id",
+        "description": "The staff member who performed the review.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "review_determination",
+        "description": "Review determination. Values: `TRUE_POSITIVE`, `FALSE_POSITIVE`, `INCONCLUSIVE`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "TRUE_POSITIVE",
+                  "FALSE_POSITIVE",
+                  "INCONCLUSIVE"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "review_comment",
+        "description": "Detailed comment explaining the reviewer's determination.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "reviewed_at",
+        "description": "Timestamp when the review was completed.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "stg_amplitude__events": {
+    "folder": "staging/amplitude",
+    "columns": [
+      {
+        "name": "event_id",
+        "description": "Primary key. Unique event identifier assigned by Amplitude.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "user_id",
+        "description": "The NALA user ID (matches `Source 1 users.id`). Null for anonymous events before the user logs in or creates an account.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "device_id",
+        "description": "Unique device identifier. Present for all events including anonymous ones.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "event_type",
+        "description": "The event name, using dot-notation (e.g. `sign_up.started`, `sign_up.completed`, `kyc_step.completed`, `send_money_screen.started`, `transaction.completed`, `open_wallet_account.completed`, `app.opened`).",
+        "data_type": "varchar"
+      },
+      {
+        "name": "event_time",
+        "description": "Timestamp of the event on the client device.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "event_properties",
+        "description": "Event-specific properties. Structure varies by event type.",
+        "data_type": "variant"
+      },
+      {
+        "name": "user_properties",
+        "description": "User properties at the time of the event. May contain `email`, `account_status`, `plan_type`, `signup_date`.",
+        "data_type": "variant"
+      },
+      {
+        "name": "platform",
+        "description": "Client platform. Values: `iOS`, `Android`.",
+        "data_type": "varchar",
+        "data_tests": [
+          {
+            "accepted_values": {
+              "arguments": {
+                "values": [
+                  "iOS",
+                  "Android"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "os_name",
+        "description": "Operating system name.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "country",
+        "description": "ISO country code derived from the user's IP address.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "city",
+        "description": "City name derived from IP geolocation.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "app_version",
+        "description": "Version of the NALA app that generated the event.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "session_id",
+        "description": "Session identifier grouping events within a single app session.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "server_upload_time",
+        "description": "Timestamp when Amplitude's servers received the event.",
+        "data_type": "timestamp_ntz"
+      }
+    ]
+  },
+  "int_transactions_classified": {
+    "folder": "intermediate",
+    "columns": [
+      {
+        "name": "transaction_id",
+        "description": "Source transaction key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "user_id",
+        "description": "Initiating user; pseudonymous but not anonymous.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "account_id",
+        "description": "Owning account.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "transaction_type",
+        "description": "Exact source type.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "transaction_state",
+        "description": "Current source state.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "sent_amount",
+        "description": "Amount in sending currency; not revenue.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "sent_currency",
+        "description": "Sending currency.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "received_currency",
+        "description": "Receiving currency.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Creation timestamp, UTC assumption.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Last state update, not guaranteed completion time.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "transaction_date",
+        "description": "UTC creation cohort date, not completion date.",
+        "data_type": "date"
+      },
+      {
+        "name": "currency_corridor",
+        "description": "Sending-receiving currency pair.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "is_volume_qualifying",
+        "description": "Five-type outbound policy.",
+        "data_type": "boolean"
+      },
+      {
+        "name": "has_unmapped_type",
+        "description": "True indicates policy drift; blocks production.",
+        "data_type": "boolean"
+      },
+      {
+        "name": "qualifying_count",
+        "description": "1 for qualifying transactions of any state.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_qualifying_count",
+        "description": "1 only for completed qualifying transactions.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_sent_amount",
+        "description": "Qualifying completed amount, otherwise zero; group by currency.",
+        "data_type": "number(38,8)"
+      }
+    ]
+  },
+  "fct_transactions": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "transaction_id",
+        "description": "Source transaction key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "user_id",
+        "description": "Initiating user; pseudonymous but not anonymous.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "account_id",
+        "description": "Owning account.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "transaction_type",
+        "description": "Exact source type.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "transaction_state",
+        "description": "Current source state.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "sent_amount",
+        "description": "Amount in sending currency; not revenue.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "sent_currency",
+        "description": "Sending currency.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "received_currency",
+        "description": "Receiving currency.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Creation timestamp, UTC assumption.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Last state update, not guaranteed completion time.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "transaction_date",
+        "description": "UTC creation cohort date, not completion date.",
+        "data_type": "date"
+      },
+      {
+        "name": "currency_corridor",
+        "description": "Sending-receiving currency pair.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "is_volume_qualifying",
+        "description": "Five-type outbound policy.",
+        "data_type": "boolean"
+      },
+      {
+        "name": "has_unmapped_type",
+        "description": "True indicates policy drift; blocks production.",
+        "data_type": "boolean"
+      },
+      {
+        "name": "qualifying_count",
+        "description": "1 for qualifying transactions of any state.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_qualifying_count",
+        "description": "1 only for completed qualifying transactions.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_sent_amount",
+        "description": "Qualifying completed amount, otherwise zero; group by currency.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "usd_per_unit",
+        "description": "1 sending-currency unit in USD on creation cohort date.",
+        "data_type": "number(38,12)"
+      },
+      {
+        "name": "fx_rate_source",
+        "description": "Approved source; USD_IDENTITY only for USD.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "completed_sent_amount_usd",
+        "description": "Completed volume converted to USD; null for missing or invalid required rate.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "is_missing_fx",
+        "description": "Required USD conversion unavailable; fails Finance publication.",
+        "data_type": "boolean"
+      }
+    ]
+  },
+  "agg_transactions_daily": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "transaction_date",
+        "description": "Creation cohort day.",
+        "data_type": "date"
+      },
+      {
+        "name": "currency_corridor",
+        "description": "Currency pair; not geographic corridor.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "sent_currency",
+        "description": "Required grouping for local-money totals.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "transaction_type",
+        "description": "Outbound transaction type.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "qualifying_transactions",
+        "description": "All states denominator.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_transactions",
+        "description": "Completed qualifying count.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_sent_amount",
+        "description": "Local currency total.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "missing_fx_transactions",
+        "description": "Completed records lacking usable FX.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_sent_amount_usd",
+        "description": "Null when any required rate is missing.",
+        "data_type": "number(38,8)"
+      },
+      {
+        "name": "transaction_success_rate",
+        "description": "Ratio of aggregate counts; null on empty denominator.",
+        "data_type": "float"
+      }
+    ]
+  },
+  "fct_disbursement_attempts": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "attempt_id",
+        "description": "Attempt key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "disbursement_id",
+        "description": "Parent payout; many attempts are allowed.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "attempt_state",
+        "description": "Current attempt state.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "provider_name",
+        "description": "Provider for this attempt, not eventual disbursement provider.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "selection_reason",
+        "description": "Route selection policy; segment comparisons.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "provider_error_category",
+        "description": "Standardised error class; no free text.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Attempt creation.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Last state update; proxy only.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "eta",
+        "description": "Expected delivery estimate.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "max_eta",
+        "description": "Maximum expected delivery time.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "attempt_date",
+        "description": "Attempt creation cohort in UTC.",
+        "data_type": "date"
+      },
+      {
+        "name": "attempt_count",
+        "description": "Denominator includes all states.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_attempt_count",
+        "description": "Numerator only COMPLETED.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "failed_attempt_count",
+        "description": "Count only FAILED; not a complement of success.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completion_seconds_proxy",
+        "description": "Creation to last update for currently completed attempts; null otherwise.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "failure_seconds_proxy",
+        "description": "Creation to last update for currently failed attempts; null otherwise.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "completion_time_band",
+        "description": "Six specified bands; UNKNOWN for unavailable durations.",
+        "data_type": "varchar"
+      }
+    ]
+  },
+  "agg_provider_daily": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "attempt_date",
+        "description": "Attempt creation cohort day.",
+        "data_type": "date"
+      },
+      {
+        "name": "provider_name",
+        "description": "Attempt provider.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "attempts",
+        "description": "All-state attempts.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_attempts",
+        "description": "Currently completed.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "failed_attempts",
+        "description": "Currently failed.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "provider_success_rate",
+        "description": "Completed/all attempts; pending remain in denominator.",
+        "data_type": "float"
+      },
+      {
+        "name": "avg_completion_seconds_proxy",
+        "description": "Mean among available currently completed durations.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "avg_failure_seconds_proxy",
+        "description": "Mean among available currently failed durations.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "under_1_min",
+        "description": "Count of currently completed attempts in the named half-open duration band; 24h belongs to 1-24h.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "from_1_to_5_min",
+        "description": "Count of currently completed attempts in the named half-open duration band; 24h belongs to 1-24h.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "from_5_to_30_min",
+        "description": "Count of currently completed attempts in the named half-open duration band; 24h belongs to 1-24h.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "from_30_min_to_1_hour",
+        "description": "Count of currently completed attempts in the named half-open duration band; 24h belongs to 1-24h.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "from_1_to_24_hours",
+        "description": "Count of currently completed attempts in the named half-open duration band; 24h belongs to 1-24h.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "over_24_hours",
+        "description": "Count of currently completed attempts in the named half-open duration band; 24h belongs to 1-24h.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "completed_duration_unknown",
+        "description": "Completed attempts with unavailable or invalid duration.",
+        "data_type": "number(38,0)"
+      }
+    ]
+  },
+  "int_workflow_context": {
+    "folder": "intermediate",
+    "columns": [
+      {
+        "name": "workflow_execution_id",
+        "description": "Execution key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "workflow_id",
+        "description": "Exact workflow version ID.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "workflow_result",
+        "description": "PASS/FAIL/ERROR.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Execution creation.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "started_at",
+        "description": "Evaluation start.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "ended_at",
+        "description": "Evaluation completion.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "user_id",
+        "description": "Context user ID, potentially null.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "transaction_id",
+        "description": "Context transaction ID, potentially null.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "has_task_action",
+        "description": "Relevant action exists; correlation remains inferred.",
+        "data_type": "boolean"
+      }
+    ]
+  },
+  "fct_rule_executions": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "rule_execution_id",
+        "description": "Execution key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "rule_id",
+        "description": "Exact immutable version key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null"
+        ]
+      },
+      {
+        "name": "workflow_execution_id",
+        "description": "Parent workflow run.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "rule_name",
+        "description": "Rule name for slicing.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null"
+        ]
+      },
+      {
+        "name": "rule_category",
+        "description": "Rule category.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null"
+        ]
+      },
+      {
+        "name": "rule_version",
+        "description": "Executed version, never latest-by-name.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "rule_result",
+        "description": "PASS/FAIL/ERROR; not an ops review determination.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Rule execution creation.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "execution_date",
+        "description": "Creation day.",
+        "data_type": "date"
+      },
+      {
+        "name": "execution_count",
+        "description": "Denominator for volume and trigger proxy.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "trigger_count_proxy",
+        "description": "1 for FAIL; validate alert semantics before ranking noise.",
+        "data_type": "number(38,0)"
+      }
+    ]
+  },
+  "fct_rule_reviews": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "review_id",
+        "description": "Formal review key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "rule_execution_id",
+        "description": "Reviewed execution.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "rule_id",
+        "description": "Executed rule version key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null"
+        ]
+      },
+      {
+        "name": "rule_name",
+        "description": "Rule name.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null"
+        ]
+      },
+      {
+        "name": "rule_category",
+        "description": "Rule category.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null"
+        ]
+      },
+      {
+        "name": "rule_version",
+        "description": "Executed version.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "review_determination",
+        "description": "TRUE_POSITIVE/FALSE_POSITIVE/INCONCLUSIVE.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "reviewed_at",
+        "description": "Formal review completion.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "review_date",
+        "description": "Review completion day, not execution cohort day.",
+        "data_type": "date"
+      },
+      {
+        "name": "execution_created_at",
+        "description": "Creation time of evaluated rule.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "review_count",
+        "description": "1 per formal review, including INCONCLUSIVE.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "false_positive_count",
+        "description": "1 for FALSE_POSITIVE.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "review_seconds",
+        "description": "Execution creation to formal review; repeat reviews each contribute.",
+        "data_type": "number(38,6)"
+      }
+    ]
+  },
+  "agg_fincrime_daily": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "activity_date",
+        "description": "Calendar activity day; distinct event clocks are documented.",
+        "data_type": "date"
+      },
+      {
+        "name": "rule_id",
+        "description": "Rule version key.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "rule_name",
+        "description": "Rule name.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "rule_category",
+        "description": "Rule category.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "rule_version",
+        "description": "Version.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "executions",
+        "description": "Executions created that day.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "triggers_proxy",
+        "description": "FAIL results created that day.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "trigger_rate_proxy",
+        "description": "FAIL/all executions; provisional trigger semantics.",
+        "data_type": "float"
+      },
+      {
+        "name": "reviews",
+        "description": "Formal reviews completed that day.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "false_positives",
+        "description": "FALSE_POSITIVE reviews completed that day.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "false_positive_rate",
+        "description": "False-positive reviews/all reviews including inconclusive.",
+        "data_type": "float"
+      },
+      {
+        "name": "avg_review_seconds",
+        "description": "Mean execution-to-review duration for reviews completed that day.",
+        "data_type": "number(38,6)"
+      }
+    ]
+  },
+  "int_fincrime_task_context": {
+    "folder": "intermediate",
+    "columns": [
+      {
+        "name": "task_id",
+        "description": "Backend task key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "task_type",
+        "description": "Source task type.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "task_state",
+        "description": "Current task state.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "resolution",
+        "description": "Outcome; null while open.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Task creation.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Latest update; resolution proxy only.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "transaction_id",
+        "description": "Typed or explicitly linked transaction.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "user_id",
+        "description": "Typed user or source transaction user.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "has_context_conflict",
+        "description": "Conflicting supplied anchors; exclude from heuristic matches.",
+        "data_type": "boolean"
+      }
+    ]
+  },
+  "int_task_workflow_candidates": {
+    "folder": "intermediate",
+    "columns": [
+      {
+        "name": "task_id",
+        "description": "Candidate task.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "workflow_execution_id",
+        "description": "Candidate workflow execution.",
+        "data_type": "varchar"
+      }
+    ]
+  },
+  "fct_fincrime_tasks": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "task_id",
+        "description": "Task key; never multiply by candidate executions.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "task_type",
+        "description": "Source task type.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "task_state",
+        "description": "Current state.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "resolution",
+        "description": "APPROVED/REJECTED/ESCALATED when populated.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "created_at",
+        "description": "Created time.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "updated_at",
+        "description": "Latest update, not dedicated resolved_at.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "task_date",
+        "description": "Task creation cohort.",
+        "data_type": "date"
+      },
+      {
+        "name": "user_id",
+        "description": "Resolved typed user context.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "transaction_id",
+        "description": "Resolved typed transaction context.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "candidate_count",
+        "description": "Number of eligible workflow candidates.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "match_status",
+        "description": "UNIQUE_INFERRED, AMBIGUOUS, UNMATCHED, UNSUPPORTED_CONTEXT or CONFLICTING_CONTEXT.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "inferred_workflow_execution_id",
+        "description": "Populated only for a single plausible candidate.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "inferred_workflow_result",
+        "description": "Result of unique candidate; observational correlation only.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "task_count",
+        "description": "1 for every fincrime task.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "resolved_task_count",
+        "description": "1 only when RESOLVED; cancelled is not resolved.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "resolution_seconds_proxy",
+        "description": "Created to latest update for resolved tasks only.",
+        "data_type": "number(38,6)"
+      }
+    ]
+  },
+  "agg_fincrime_tasks_daily": {
+    "folder": "marts",
+    "columns": [
+      {
+        "name": "task_date",
+        "description": "Creation cohort day.",
+        "data_type": "date"
+      },
+      {
+        "name": "match_status",
+        "description": "Inference quality class.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "inferred_workflow_result",
+        "description": "PASS/FAIL/ERROR only for unique inferred links.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "resolution",
+        "description": "Task outcome; null while open.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "tasks_created",
+        "description": "All tasks in group.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "resolved_tasks",
+        "description": "Resolved count.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "resolved_proportion",
+        "description": "Resolved/all tasks; not average of sub-group rates.",
+        "data_type": "float"
+      },
+      {
+        "name": "avg_resolution_seconds_proxy",
+        "description": "Mean for currently resolved tasks with valid update timestamp.",
+        "data_type": "number(38,6)"
+      }
+    ]
+  },
+  "int_onboarding_events": {
+    "folder": "exploratory",
+    "columns": [
+      {
+        "name": "event_id",
+        "description": "Amplitude event key.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "resolved_user_id",
+        "description": "Explicit user or single-user device inference; nullable.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "device_id",
+        "description": "Device identifier; shared devices not assigned to a guessed user.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "funnel_entity_id",
+        "description": "user:<id> when resolved, otherwise device:<id>.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "identity_method",
+        "description": "Direct, inferred or unresolved identity path.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "event_type",
+        "description": "One of the four relevant event types.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "event_time",
+        "description": "Client event time; UTC interpretation is an assumption.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "country",
+        "description": "Event-time IP country, not a verified user residence.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "server_upload_time",
+        "description": "Amplitude arrival, not Fivetran sync completion.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "is_final_kyc_event",
+        "description": "Requires explicit event_properties.is_final_step=true; ordinary step completion is insufficient.",
+        "data_type": "boolean"
+      }
+    ]
+  },
+  "fct_onboarding_funnel": {
+    "folder": "exploratory",
+    "columns": [
+      {
+        "name": "funnel_entity_id",
+        "description": "One deduplicated user/device cohort entity.",
+        "data_type": "varchar",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ]
+      },
+      {
+        "name": "user_id",
+        "description": "Resolved user; null for unresolved devices.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "signup_country",
+        "description": "Country at the selected signup-completed event; null before completion.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "signup_started_at",
+        "description": "Earliest observed start.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "signup_completed_at",
+        "description": "First observed completion at or after start, or first observed completion when start is absent.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "kyc_completed_at",
+        "description": "First explicitly final KYC event after signup.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "first_transaction_completed_at",
+        "description": "First observed transaction after signup, independent of KYC logging.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "funnel_transaction_completed_at",
+        "description": "First observed transaction after confirmed final KYC.",
+        "data_type": "timestamp_ntz"
+      },
+      {
+        "name": "cohort_date",
+        "description": "Observed start day, falling back to signup-completed day.",
+        "data_type": "date"
+      },
+      {
+        "name": "started_count",
+        "description": "1 when start observed.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "ordered_signup_count",
+        "description": "1 when start and subsequent signup completion observed.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "ordered_kyc_count",
+        "description": "1 when ordered chain reaches confirmed final KYC.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "ordered_transaction_count",
+        "description": "1 when ordered chain reaches transaction.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "signup_to_first_transaction_hours",
+        "description": "Required exploratory metric; observed converters with resolved user only, independent of KYC presence.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "start_to_signup_hours",
+        "description": "Observed first-to-second-step duration.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "signup_to_kyc_hours",
+        "description": "Observed second-to-third-step duration.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "kyc_to_transaction_hours",
+        "description": "Observed third-to-fourth-step duration.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "observation_window_days",
+        "description": "Bounded lookback; report left and right censoring.",
+        "data_type": "number(38,0)"
+      }
+    ]
+  },
+  "agg_onboarding_daily": {
+    "folder": "exploratory",
+    "columns": [
+      {
+        "name": "cohort_date",
+        "description": "Start cohort or fallback signup day.",
+        "data_type": "date"
+      },
+      {
+        "name": "signup_country",
+        "description": "Observed at completed signup; not available for abandoned starts.",
+        "data_type": "varchar"
+      },
+      {
+        "name": "signup_started",
+        "description": "Count of entities reaching this step in strict order.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "signup_completed",
+        "description": "Count of entities reaching this step in strict order.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "kyc_completed",
+        "description": "Count of entities reaching this step in strict order.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "transaction_completed",
+        "description": "Count of entities reaching this step in strict order.",
+        "data_type": "number(38,0)"
+      },
+      {
+        "name": "start_to_signup_rate",
+        "description": "Ratio of summed stage indicators, null on zero denominator.",
+        "data_type": "float"
+      },
+      {
+        "name": "signup_to_kyc_rate",
+        "description": "Ratio of summed stage indicators, null on zero denominator.",
+        "data_type": "float"
+      },
+      {
+        "name": "kyc_to_transaction_rate",
+        "description": "Ratio of summed stage indicators, null on zero denominator.",
+        "data_type": "float"
+      },
+      {
+        "name": "avg_start_to_signup_hours",
+        "description": "Mean elapsed hours among observed converters; censored nonconverters excluded.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "avg_signup_to_kyc_hours",
+        "description": "Mean elapsed hours among observed converters; censored nonconverters excluded.",
+        "data_type": "number(38,6)"
+      },
+      {
+        "name": "avg_kyc_to_transaction_hours",
+        "description": "Mean elapsed hours among observed converters; censored nonconverters excluded.",
+        "data_type": "number(38,6)"
+      }
+    ]
+  },
+  "metricflow_time_spine": {
+    "folder": "utilities",
+    "columns": [
+      {
+        "name": "date_day",
+        "description": "Dense UTC calendar date.",
+        "data_type": "date",
+        "data_tests": [
+          "not_null",
+          "unique"
+        ],
+        "granularity": "day"
+      }
+    ]
+  }
+}

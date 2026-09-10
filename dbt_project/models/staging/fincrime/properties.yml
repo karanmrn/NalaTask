@@ -1,0 +1,278 @@
+version: 2
+models:
+- name: stg_fincrime__rules
+  description: One row per source rules record. Typed current state; no financial filters or hidden deduplication.
+    Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source rules record
+    tags:
+    - staging
+    - fincrime
+    materialized: view
+  columns:
+  - name: rule_id
+    description: Primary key. Unique rule version identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: rule_name
+    description: Machine-readable rule name (e.g. `high_value_transaction_check`).
+    data_type: varchar
+  - name: title
+    description: Human-readable rule title.
+    data_type: varchar
+  - name: description
+    description: Detailed description of what the rule checks.
+    data_type: varchar
+  - name: rule_type
+    description: Rule type (e.g. `THRESHOLD`, `PATTERN`, `LIST_CHECK`).
+    data_type: varchar
+  - name: rule_category
+    description: Rule category (e.g. `AML`, `FRAUD`, `SANCTIONS`).
+    data_type: varchar
+  - name: team
+    description: The team responsible for this rule.
+    data_type: varchar
+  - name: condition
+    description: The rule's condition expression.
+    data_type: varchar
+  - name: rule_version
+    description: Version number. Higher is newer.
+    data_type: number(38,0)
+  - name: created_at
+    description: Timestamp when this version was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent update.
+    data_type: timestamp_ntz
+  - name: deleted_at
+    description: Timestamp when this rule version was soft-deleted. Null if active.
+    data_type: timestamp_ntz
+- name: stg_fincrime__workflows
+  description: One row per source workflows record. Typed current state; no financial filters or hidden deduplication.
+    Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source workflows record
+    tags:
+    - staging
+    - fincrime
+    materialized: view
+  columns:
+  - name: workflow_id
+    description: Primary key. Unique workflow version identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: workflow_name
+    description: Machine-readable workflow name.
+    data_type: varchar
+  - name: title
+    description: Human-readable workflow title.
+    data_type: varchar
+  - name: workflow_type
+    description: Workflow type (e.g. `PRE_TRANSACTION`, `POST_TRANSACTION`, `USER_ONBOARDING`).
+    data_type: varchar
+  - name: config
+    description: Workflow configuration. Contains a `nodes` array where each node has `type` (e.g. `RULE`)
+      and `config.rule_id` referencing a rule.
+    data_type: variant
+  - name: workflow_version
+    description: Version number. Higher is newer.
+    data_type: number(38,0)
+  - name: created_at
+    description: Timestamp when this version was created.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Timestamp of the most recent update.
+    data_type: timestamp_ntz
+  - name: deleted_at
+    description: Timestamp when this workflow version was soft-deleted. Null if active.
+    data_type: timestamp_ntz
+- name: stg_fincrime__workflow_executions
+  description: One row per source workflow_executions record. Typed current state; no financial filters or
+    hidden deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source workflow_executions record
+    tags:
+    - staging
+    - fincrime
+    materialized: view
+  columns:
+  - name: workflow_execution_id
+    description: Primary key. Unique execution identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: workflow_id
+    description: Foreign key to `workflows.id`. The workflow that was executed.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_fincrime__workflows')
+          field: workflow_id
+  - name: workflow_result
+    description: 'Overall execution result. Values: `PASS`, `FAIL`, `ERROR`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - PASS
+          - FAIL
+          - ERROR
+  - name: context
+    description: The business context for this execution. Contains `user_id` (string, references `Source 1
+      users.id`) and `transaction_id` (string, references `Source 1 transactions_transaction.id`). One or both
+      may be present depending on the trigger event.
+    data_type: variant
+  - name: created_at
+    description: Timestamp when the execution was initiated.
+    data_type: timestamp_ntz
+  - name: started_at
+    description: Timestamp when evaluation began.
+    data_type: timestamp_ntz
+  - name: ended_at
+    description: Timestamp when evaluation completed.
+    data_type: timestamp_ntz
+  - name: error
+    description: Error details if the execution failed due to a system error. Null on success.
+    data_type: varchar
+  - name: actions
+    description: Array of actions triggered by this execution (e.g. `BLOCK_USER`, `HOLD_TRANSACTION`, `CREATE_TASK`).
+    data_type: variant
+- name: stg_fincrime__rule_executions
+  description: One row per source rule_executions record. Typed current state; no financial filters or hidden
+    deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source rule_executions record
+    tags:
+    - staging
+    - fincrime
+    materialized: view
+  columns:
+  - name: rule_execution_id
+    description: Primary key. Unique rule execution identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: rule_id
+    description: Foreign key to `rules.id`. The rule that was evaluated.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_fincrime__rules')
+          field: rule_id
+  - name: workflow_execution_id
+    description: Foreign key to `workflow_executions.id`. The parent workflow execution.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_fincrime__workflow_executions')
+          field: workflow_execution_id
+  - name: rule_result
+    description: 'Rule evaluation result. Values: `PASS`, `FAIL`, `ERROR`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - PASS
+          - FAIL
+          - ERROR
+  - name: condition_result
+    description: The raw result of the condition evaluation.
+    data_type: varchar
+  - name: context
+    description: Same structure as `workflow_executions.context`. Contains `user_id` and/or `transaction_id`.
+    data_type: variant
+  - name: created_at
+    description: Timestamp when the rule evaluation started.
+    data_type: timestamp_ntz
+  - name: started_at
+    description: Timestamp when condition evaluation began.
+    data_type: timestamp_ntz
+  - name: ended_at
+    description: Timestamp when condition evaluation completed.
+    data_type: timestamp_ntz
+  - name: error
+    description: Error details if the rule evaluation failed. Null on success.
+    data_type: varchar
+  - name: review
+    description: 'Review status, if the rule execution was reviewed. Values: `PENDING`, `REVIEWED`. Null if
+      no review is required.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - PENDING
+          - REVIEWED
+  - name: review_comment
+    description: Comment left by the reviewer. Null if not reviewed.
+    data_type: varchar
+  - name: reviewer_id
+    description: The staff member who reviewed this execution. Null if not reviewed.
+    data_type: varchar
+  - name: reviewed_at
+    description: Timestamp when the review was completed. Null if not reviewed.
+    data_type: timestamp_ntz
+- name: stg_fincrime__reviews
+  description: One row per source rule_execution_reviews record. Typed current state; no financial filters
+    or hidden deduplication. Restricted staging retains source-sensitive fields.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per source rule_execution_reviews record
+    tags:
+    - staging
+    - fincrime
+    materialized: view
+  columns:
+  - name: review_id
+    description: Primary key. Unique review identifier.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: rule_execution_id
+    description: Foreign key to `rule_executions.id`.
+    data_type: varchar
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('stg_fincrime__rule_executions')
+          field: rule_execution_id
+  - name: reviewer_id
+    description: The staff member who performed the review.
+    data_type: varchar
+  - name: review_determination
+    description: 'Review determination. Values: `TRUE_POSITIVE`, `FALSE_POSITIVE`, `INCONCLUSIVE`.'
+    data_type: varchar
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - TRUE_POSITIVE
+          - FALSE_POSITIVE
+          - INCONCLUSIVE
+  - name: review_comment
+    description: Detailed comment explaining the reviewer's determination.
+    data_type: varchar
+  - name: reviewed_at
+    description: Timestamp when the review was completed.
+    data_type: timestamp_ntz

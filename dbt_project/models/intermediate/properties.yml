@@ -1,0 +1,160 @@
+version: 2
+models:
+- name: int_transactions_classified
+  description: One row per transaction. Classification and creation-day cohort; current states restate historical
+    cohorts.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per transaction
+  columns:
+  - name: transaction_id
+    description: Source transaction key.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Initiating user; pseudonymous but not anonymous.
+    data_type: varchar
+  - name: account_id
+    description: Owning account.
+    data_type: varchar
+  - name: transaction_type
+    description: Exact source type.
+    data_type: varchar
+  - name: transaction_state
+    description: Current source state.
+    data_type: varchar
+  - name: sent_amount
+    description: Amount in sending currency; not revenue.
+    data_type: number(38,8)
+  - name: sent_currency
+    description: Sending currency.
+    data_type: varchar
+  - name: received_currency
+    description: Receiving currency.
+    data_type: varchar
+  - name: created_at
+    description: Creation timestamp, UTC assumption.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Last state update, not guaranteed completion time.
+    data_type: timestamp_ntz
+  - name: transaction_date
+    description: UTC creation cohort date, not completion date.
+    data_type: date
+  - name: currency_corridor
+    description: Sending-receiving currency pair.
+    data_type: varchar
+  - name: is_volume_qualifying
+    description: Five-type outbound policy.
+    data_type: boolean
+  - name: has_unmapped_type
+    description: True indicates policy drift; blocks production.
+    data_type: boolean
+  - name: qualifying_count
+    description: 1 for qualifying transactions of any state.
+    data_type: number(38,0)
+  - name: completed_qualifying_count
+    description: 1 only for completed qualifying transactions.
+    data_type: number(38,0)
+  - name: completed_sent_amount
+    description: Qualifying completed amount, otherwise zero; group by currency.
+    data_type: number(38,8)
+- name: int_workflow_context
+  description: One row per workflow execution. Extracted typed entity identifiers and task-relevant action
+    flags; raw free-text errors are not exposed.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per workflow execution
+  columns:
+  - name: workflow_execution_id
+    description: Execution key.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: workflow_id
+    description: Exact workflow version ID.
+    data_type: varchar
+  - name: workflow_result
+    description: PASS/FAIL/ERROR.
+    data_type: varchar
+  - name: created_at
+    description: Execution creation.
+    data_type: timestamp_ntz
+  - name: started_at
+    description: Evaluation start.
+    data_type: timestamp_ntz
+  - name: ended_at
+    description: Evaluation completion.
+    data_type: timestamp_ntz
+  - name: user_id
+    description: Context user ID, potentially null.
+    data_type: varchar
+  - name: transaction_id
+    description: Context transaction ID, potentially null.
+    data_type: varchar
+  - name: has_task_action
+    description: Relevant action exists; correlation remains inferred.
+    data_type: boolean
+- name: int_fincrime_task_context
+  description: One row per fincrime task. Typed array conventions are provisional; unsupported task types are
+    not guessed from an untyped UUID. Disbursement context can supply an explicit parent transaction.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per fincrime task
+  columns:
+  - name: task_id
+    description: Backend task key.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: task_type
+    description: Source task type.
+    data_type: varchar
+  - name: task_state
+    description: Current task state.
+    data_type: varchar
+  - name: resolution
+    description: Outcome; null while open.
+    data_type: varchar
+  - name: created_at
+    description: Task creation.
+    data_type: timestamp_ntz
+  - name: updated_at
+    description: Latest update; resolution proxy only.
+    data_type: timestamp_ntz
+  - name: transaction_id
+    description: Typed or explicitly linked transaction.
+    data_type: varchar
+  - name: user_id
+    description: Typed user or source transaction user.
+    data_type: varchar
+  - name: has_context_conflict
+    description: Conflicting supplied anchors; exclude from heuristic matches.
+    data_type: boolean
+- name: int_task_workflow_candidates
+  description: One row per plausible task-workflow pair. Equality of typed entity, relevant action and preceding
+    time window is only evidence of correlation, never an exact causal foreign key.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per plausible task-workflow pair
+  columns:
+  - name: task_id
+    description: Candidate task.
+    data_type: varchar
+  - name: workflow_execution_id
+    description: Candidate workflow execution.
+    data_type: varchar
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - task_id
+        - workflow_execution_id

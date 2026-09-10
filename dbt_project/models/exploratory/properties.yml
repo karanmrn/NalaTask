@@ -1,0 +1,163 @@
+version: 2
+models:
+- name: int_onboarding_events
+  description: One row per relevant Amplitude event in a bounded observation window. Device stitching is exploratory
+    only; is_final_step is an explicitly assumed instrumentation contract, absent from the supplied schema.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per relevant Amplitude event in a bounded observation window
+    materialized: table
+  columns:
+  - name: event_id
+    description: Amplitude event key.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: resolved_user_id
+    description: Explicit user or single-user device inference; nullable.
+    data_type: varchar
+  - name: device_id
+    description: Device identifier; shared devices not assigned to a guessed user.
+    data_type: varchar
+  - name: funnel_entity_id
+    description: user:<id> when resolved, otherwise device:<id>.
+    data_type: varchar
+  - name: identity_method
+    description: Direct, inferred or unresolved identity path.
+    data_type: varchar
+  - name: event_type
+    description: One of the four relevant event types.
+    data_type: varchar
+  - name: event_time
+    description: Client event time; UTC interpretation is an assumption.
+    data_type: timestamp_ntz
+  - name: country
+    description: Event-time IP country, not a verified user residence.
+    data_type: varchar
+  - name: server_upload_time
+    description: Amplitude arrival, not Fivetran sync completion.
+    data_type: timestamp_ntz
+  - name: is_final_kyc_event
+    description: Requires explicit event_properties.is_final_step=true; ordinary step completion is insufficient.
+    data_type: boolean
+- name: fct_onboarding_funnel
+  description: One row per user or unresolved device with observed signup activity. Ordered funnel and independent
+    required signup-to-first-transaction metric are separate. First means first observed after signup within
+    the window, not proven lifetime first.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per user or unresolved device with observed signup activity
+    materialized: view
+  columns:
+  - name: funnel_entity_id
+    description: One deduplicated user/device cohort entity.
+    data_type: varchar
+    data_tests:
+    - not_null
+    - unique
+  - name: user_id
+    description: Resolved user; null for unresolved devices.
+    data_type: varchar
+  - name: signup_country
+    description: Country at the selected signup-completed event; null before completion.
+    data_type: varchar
+  - name: signup_started_at
+    description: Earliest observed start.
+    data_type: timestamp_ntz
+  - name: signup_completed_at
+    description: First observed completion at or after start, or first observed completion when start is absent.
+    data_type: timestamp_ntz
+  - name: kyc_completed_at
+    description: First explicitly final KYC event after signup.
+    data_type: timestamp_ntz
+  - name: first_transaction_completed_at
+    description: First observed transaction after signup, independent of KYC logging.
+    data_type: timestamp_ntz
+  - name: funnel_transaction_completed_at
+    description: First observed transaction after confirmed final KYC.
+    data_type: timestamp_ntz
+  - name: cohort_date
+    description: Observed start day, falling back to signup-completed day.
+    data_type: date
+  - name: started_count
+    description: 1 when start observed.
+    data_type: number(38,0)
+  - name: ordered_signup_count
+    description: 1 when start and subsequent signup completion observed.
+    data_type: number(38,0)
+  - name: ordered_kyc_count
+    description: 1 when ordered chain reaches confirmed final KYC.
+    data_type: number(38,0)
+  - name: ordered_transaction_count
+    description: 1 when ordered chain reaches transaction.
+    data_type: number(38,0)
+  - name: signup_to_first_transaction_hours
+    description: Required exploratory metric; observed converters with resolved user only, independent of KYC
+      presence.
+    data_type: number(38,6)
+  - name: start_to_signup_hours
+    description: Observed first-to-second-step duration.
+    data_type: number(38,6)
+  - name: signup_to_kyc_hours
+    description: Observed second-to-third-step duration.
+    data_type: number(38,6)
+  - name: kyc_to_transaction_hours
+    description: Observed third-to-fourth-step duration.
+    data_type: number(38,6)
+  - name: observation_window_days
+    description: Bounded lookback; report left and right censoring.
+    data_type: number(38,0)
+- name: agg_onboarding_daily
+  description: One row per observed cohort day and signup-event country. Proof of concept, not production conversion
+    attribution; country is unknown for unconverted starts.
+  config:
+    meta:
+      owner: data-engineering
+      grain: One row per observed cohort day and signup-event country
+    materialized: view
+  columns:
+  - name: cohort_date
+    description: Start cohort or fallback signup day.
+    data_type: date
+  - name: signup_country
+    description: Observed at completed signup; not available for abandoned starts.
+    data_type: varchar
+  - name: signup_started
+    description: Count of entities reaching this step in strict order.
+    data_type: number(38,0)
+  - name: signup_completed
+    description: Count of entities reaching this step in strict order.
+    data_type: number(38,0)
+  - name: kyc_completed
+    description: Count of entities reaching this step in strict order.
+    data_type: number(38,0)
+  - name: transaction_completed
+    description: Count of entities reaching this step in strict order.
+    data_type: number(38,0)
+  - name: start_to_signup_rate
+    description: Ratio of summed stage indicators, null on zero denominator.
+    data_type: float
+  - name: signup_to_kyc_rate
+    description: Ratio of summed stage indicators, null on zero denominator.
+    data_type: float
+  - name: kyc_to_transaction_rate
+    description: Ratio of summed stage indicators, null on zero denominator.
+    data_type: float
+  - name: avg_start_to_signup_hours
+    description: Mean elapsed hours among observed converters; censored nonconverters excluded.
+    data_type: number(38,6)
+  - name: avg_signup_to_kyc_hours
+    description: Mean elapsed hours among observed converters; censored nonconverters excluded.
+    data_type: number(38,6)
+  - name: avg_kyc_to_transaction_hours
+    description: Mean elapsed hours among observed converters; censored nonconverters excluded.
+    data_type: number(38,6)
+  data_tests:
+  - unique_combination:
+      arguments:
+        columns:
+        - cohort_date
+        - signup_country

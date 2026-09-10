@@ -1,0 +1,16 @@
+selectors:
+  - name: production
+    description: Production marts and their ancestors; never the Amplitude branch.
+    definition:
+      union:
+        - method: tag
+          value: production
+          parents: true
+        - method: fqn
+          value: metricflow_time_spine
+  - name: exploratory
+    description: On-demand growth branch plus its ancestors; no production schedule dependency.
+    definition:
+      method: tag
+      value: exploratory
+      parents: true

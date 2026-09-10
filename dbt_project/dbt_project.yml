@@ -1,0 +1,51 @@
+name: nala_analytics
+version: '1.0.0'
+config-version: 2
+profile: nala_analytics
+require-dbt-version: [">=1.10.5", "<1.11.0"]
+model-paths: [models]
+test-paths: [tests]
+seed-paths: [seeds]
+macro-paths: [macros]
+analysis-paths: [analyses]
+clean-targets: [target, dbt_packages, logs]
+vars:
+  raw_database: RAW
+  payments_raw_schema: PAYMENTS
+  fincrime_raw_schema: FINCRIME
+  amplitude_raw_schema: AMPLITUDE
+  reference_raw_schema: REFERENCE
+  enable_attempt_incremental: false
+  incremental_overlap_days: 3
+  task_match_window_minutes: 60
+  exploration_days: 90
+models:
+  nala_analytics:
+    +persist_docs: {relation: true, columns: true}
+    +query_tag: nala_assessment
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+      +transient: false
+      +tags: [production]
+      +contract: {enforced: true}
+    exploratory:
+      +schema: exploratory
+      +materialized: view
+      +tags: [exploratory]
+    utilities:
+      +schema: utilities
+      +materialized: table
+seeds:
+  nala_analytics:
+    +schema: reference
+    +quote_columns: false
+data_tests:
+  nala_analytics:
+    +store_failures: false

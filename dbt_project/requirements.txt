@@ -1,0 +1,6 @@
+# Reproducible compatibility baseline, not a claim to use the newest engine.
+dbt-core==1.10.13
+dbt-snowflake==1.10.2
+PyYAML==6.0.2
+Jinja2==3.1.6
+pytest==8.4.2

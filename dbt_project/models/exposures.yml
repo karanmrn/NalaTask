@@ -1,0 +1,51 @@
+version: 2
+exposures:
+- name: finance_completed_volume
+  type: dashboard
+  maturity: medium
+  description: Finance currency-safe daily cohort reporting; USD blocked until rates validate. Planned Hex consumer,
+    not a claim of deployed dashboard.
+  depends_on:
+  - ref('fct_transactions')
+  - ref('agg_transactions_daily')
+  owner:
+    name: NALA Data Team
+- name: payout_operations
+  type: dashboard
+  maturity: medium
+  description: Provider attempt performance with explicit duration proxies. Planned Hex consumer, not a claim of
+    deployed dashboard.
+  depends_on:
+  - ref('fct_disbursement_attempts')
+  - ref('agg_provider_daily')
+  owner:
+    name: NALA Data Team
+- name: fincrime_rule_quality
+  type: dashboard
+  maturity: medium
+  description: Formal-review false positives and execution noise. Planned Hex consumer, not a claim of deployed
+    dashboard.
+  depends_on:
+  - ref('fct_rule_reviews')
+  - ref('agg_fincrime_daily')
+  owner:
+    name: NALA Data Team
+- name: fincrime_task_pipeline
+  type: dashboard
+  maturity: medium
+  description: All tasks, linkage coverage, inferred result/outcome correlation. Planned Hex consumer, not a claim
+    of deployed dashboard.
+  depends_on:
+  - ref('fct_fincrime_tasks')
+  - ref('agg_fincrime_tasks_daily')
+  owner:
+    name: NALA Data Team
+- name: growth_funnel_poc
+  type: dashboard
+  maturity: low
+  description: POC only; no production decision dependency. Planned Hex consumer, not a claim of deployed dashboard.
+  depends_on:
+  - ref('fct_onboarding_funnel')
+  - ref('agg_onboarding_daily')
+  owner:
+    name: NALA Data Team
