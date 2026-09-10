@@ -13,15 +13,33 @@ Deliverables:
 
 ## Run it
 
+Prerequisites: Python 3.11 or 3.12 and [uv](https://docs.astral.sh/uv/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`). No warehouse account needed.
+
 ```bash
-uv sync            # dbt-core 1.12, dbt-duckdb, dbt-snowflake, MetricFlow, sqlfluff
-make build         # generate synthetic RAW, seed, snapshot, build, test (DuckDB, no credentials)
-make metrics       # validate semantic layer and query the five required metrics
-make lint          # sqlfluff
+git clone https://github.com/karanmrn/NalaTask.git   # or unzip NalaTask_submission.zip
+cd NalaTask
+uv sync            # installs dbt-core 1.12, dbt-duckdb, dbt-snowflake, MetricFlow, sqlfluff into .venv
+make build         # generates synthetic RAW, seeds it, runs snapshot, models, data tests, unit tests (about 20 s)
+make metrics       # validates the semantic layer and queries the five required metrics
+make lint          # sqlfluff over models, tests, analyses
 ```
 
-Production target is Snowflake: `dbt build --target prod` with `SNOWFLAKE_*` environment variables (see `profiles.yml`).
-Dialect differences live in `macros/cross_db.sql`; nothing else changes between engines.
+Expected end of `make build`: `Done. PASS=201 WARN=0 ERROR=0 SKIP=0`.
+
+Useful follow-ups:
+
+```bash
+uv run dbt docs generate && uv run dbt docs serve      # lineage and column docs in the browser
+uv run dbt build --select fct_transactions+             # one mart and its children
+uv run dbt build --selector production                  # production graph only (no Amplitude branch)
+uv run dbt build --selector exploratory                 # onboarding funnel branch
+uv run duckdb target/nala.duckdb                        # query the built tables directly
+```
+
+Production target is Snowflake. Set `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY_PATH`, `SNOWFLAKE_ROLE`,
+`SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`, then `uv run dbt build --target prod`. `uv run dbt parse --target prod`
+works without credentials and is part of CI. Dialect differences live in `macros/cross_db.sql`; nothing else changes
+between engines. The synthetic seeds under `seeds/raw/` are disabled on Snowflake.
 
 ## Requirement to model map
 
