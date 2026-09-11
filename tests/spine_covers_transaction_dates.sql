@@ -1,6 +1,8 @@
 {{ config(severity='error', tags=['finance']) }}
 with spine as (
-    select min(date_day) as min_day, max(date_day) as max_day
+    select
+        min(date_day) as min_day,
+        max(date_day) as max_day
     from {{ ref('metricflow_time_spine') }}
 )
 

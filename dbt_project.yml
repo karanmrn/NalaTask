@@ -1,68 +1,77 @@
 name: nala_analytics
-version: '1.0.0'
-config-version: 2
 profile: nala_analytics
-require-dbt-version: [">=1.10.0", "<2.0.0"]
-
-model-paths: [models]
-test-paths: [tests]
-seed-paths: [seeds]
-macro-paths: [macros]
-analysis-paths: [analyses]
-snapshot-paths: [snapshots]
-clean-targets: [target, dbt_packages, logs]
-
+version: 1.0.0
+config-version: 2
+require-dbt-version:
+  - '>=1.10.0'
+  - <2.0.0
+model-paths:
+  - models
+test-paths:
+  - tests
+seed-paths:
+  - seeds
+macro-paths:
+  - macros
+analysis-paths:
+  - analyses
+snapshot-paths:
+  - snapshots
+clean-targets:
+  - target
+  - dbt_packages
+  - logs
 vars:
-  # RAW landing. On DuckDB the synthetic seeds emulate RAW inside the local database file.
   raw_database: RAW
   payments_raw_schema: PAYMENTS
   fincrime_raw_schema: FINCRIME
   amplitude_raw_schema: AMPLITUDE
   reference_raw_schema: REFERENCE
-  # StreamServe landing shape: change_log (append-only, deduped in staging) or current_state.
   cdc_landing_mode: change_log
-  # Incremental facts reprocess this many days of source updates on every run.
   incremental_lookback_days: 3
-  # FX: latest approved rate on or before the transaction date, at most this many days old.
   fx_max_staleness_days: 7
   task_match_window_minutes: 60
   exploration_days: 90
-
 models:
   nala_analytics:
-    +persist_docs: {relation: true, columns: true}
+    +persist_docs:
+      relation: true
+      columns: true
     +query_tag: nala_dbt
     staging:
       +schema: staging
       +materialized: view
-      +tags: [staging]
+      +tags:
+        - staging
     intermediate:
       +schema: intermediate
       +materialized: view
-      +tags: [intermediate]
+      +tags:
+        - intermediate
     marts:
       +schema: marts
       +materialized: table
-      +tags: [production]
-      # Contracts are enforced on Snowflake. DuckDB type names differ, so local runs document only.
-      +contract: {enforced: "{{ (target.type == 'snowflake') | as_bool }}"}
+      +tags:
+        - production
+      +contract:
+        enforced: "{{ (target.type == 'snowflake') | as_bool }}"
     exploratory:
       +schema: exploratory
       +materialized: view
-      +tags: [exploratory]
+      +tags:
+        - exploratory
     utilities:
       +schema: utilities
       +materialized: table
-
 seeds:
   nala_analytics:
     +quote_columns: false
     reference:
       +schema: reference
     raw:
-      # Synthetic RAW landing tables for local development and CI only. Never loaded in prod.
       +enabled: "{{ (target.type == 'duckdb') | as_bool }}"
-      +meta: {raw_landing: true}
+      +meta:
+        raw_landing: true
       payments:
         +schema: payments
       fincrime:
@@ -71,11 +80,11 @@ seeds:
         +schema: amplitude
       reference:
         +schema: reference
-
 snapshots:
   nala_analytics:
     +schema: snapshots
-
 data_tests:
   nala_analytics:
     +store_failures: false
+flags:
+  require_generic_test_arguments_property: true

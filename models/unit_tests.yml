@@ -132,3 +132,31 @@ unit_tests:
       provider_success_rate: 0.5
       avg_completion_seconds: 30
       under_1_min: 1
+- name: rule_execution_incremental_uses_cdc_load_time
+  description: A recently loaded update is processed even when the rule execution was created outside the lookback.
+  model: fct_rule_executions
+  given:
+  - input: ref('stg_fincrime__rule_executions')
+    rows:
+    - rule_execution_id: e_old
+      rule_id: r1
+      workflow_execution_id: w1
+      rule_result: FAIL
+      created_at: '2026-08-01 10:00:00'
+      _loaded_at: '2026-09-11 09:00:00'
+  - input: ref('stg_fincrime__rules')
+    rows:
+    - rule_id: r1
+      rule_name: late_update_check
+      rule_category: AML
+      rule_version: 1
+  - input: this
+    rows:
+    - rule_execution_id: e_recent
+      created_at: '2026-09-10 10:00:00'
+      _loaded_at: '2026-09-10 10:00:00'
+  expect:
+    rows:
+    - rule_execution_id: e_old
+      rule_result: FAIL
+      _loaded_at: '2026-09-11 09:00:00'
