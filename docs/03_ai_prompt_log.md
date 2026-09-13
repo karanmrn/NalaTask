@@ -31,6 +31,18 @@ Things it found that I would have missed: `try_parse_json` and `array_contains` 
 
 Things I overruled: it proposed a Snowflake trial account to prove the build. The brief says the project need not run, and I had used DuckDB plus uv for the same purpose on a previous project, so I chose that: `dbt build` locally plus `dbt parse --target prod` covers the parse and execution risk without a second environment. I also dropped the 14-page interview walkthrough GPT had produced from the submission; that is preparation, not a deliverable.
 
+## Pass 3: Cursor, a second pair of eyes
+
+Opened the repo in Cursor with the dbt extension to read the models with lineage and hover docs. Its agent reformatted
+`sources.yml` and `dbt_project.yml`, added the `require_generic_test_arguments_property` flag, and proposed a unit test
+asserting that `fct_rule_executions` picks up a row created weeks ago but replicated today.
+
+Kept: the flag, and the idea behind the test. Rule executions are immutable events, so the incremental watermark is now
+the connector load time (`coalesce(_loaded_at, created_at)`) instead of `created_at`. Dropped: the unit test itself,
+because dbt cannot mock `this` for an incremental model before the table exists, which breaks a fresh-clone `dbt build`;
+the behaviour is covered by the second incremental run in CI. Restored: the explanatory comments the reformat stripped
+from `dbt_project.yml`.
+
 ## What I did myself
 
 Chose the grains and denominators. Decided the two finance time axes. Wrote the assumptions table. Read every model once before sending. Ran `make build`, `make metrics`, `make lint` on the final commit.
