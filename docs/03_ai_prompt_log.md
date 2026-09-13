@@ -39,12 +39,34 @@ asserting that `fct_rule_executions` picks up a row created weeks ago but replic
 
 Kept: the flag, and the idea behind the test. Rule executions are immutable events, so the incremental watermark is now
 the connector load time (`coalesce(_loaded_at, created_at)`) instead of `created_at`. Dropped: the unit test itself,
-because dbt cannot mock `this` for an incremental model before the table exists, which breaks a fresh-clone `dbt build`;
-the behaviour is covered by the second incremental run in CI. Restored: the explanatory comments the reformat stripped
+because dbt cannot mock `this` for an incremental model before the table exists, which breaks a fresh-clone `dbt build`.
+At that point the late-arrival path had no automated coverage (historical note: this log briefly claimed CI covered it;
+it did not, and pass 4 fixed that). Restored: the explanatory comments the reformat stripped
 from `dbt_project.yml`.
+
+## Pass 4: external review, repair
+
+A reviewer read the submission and reported three defects. All three were real:
+
+1. `completed_transaction_volume_usd` summed nullable per-row USD amounts, so MetricFlow could publish a partial total
+   while the daily aggregate correctly returned null. Fixed with an additive `missing_fx_count` on `fct_transactions`
+   and a derived metric `usd_sum / nullif(1 - sign(missing_fx_transactions), 0)`. Seven scenarios (all valid, one
+   missing, all missing, two groups, combined total, excluded row, filter restores) run through the real `mf query`
+   path in `scripts/test_missing_fx_metric.py`.
+2. The prompt log claimed a second CI run covered late-arriving rule executions. CI ran one build. Now
+   `scripts/test_late_arrival.py` injects a historical execution with a recent load time plus a correction to an
+   existing key, runs the incremental merge, asserts the insert, the corrected value, key uniqueness, the unchanged
+   reporting date, and an idempotent rerun. Wired into `make regress` and the GitHub Actions workflow.
+3. The architecture described an FX source-freshness gate that was never configured and said all facts filter on
+   `updated_at`. Reworded: the finance gate is the `finance_no_missing_fx` test; rule executions filter on
+   `coalesce(_loaded_at, created_at)`. Added a known-limits section (snapshot granularity, delete propagation into
+   merged facts, FX and policy reprocessing, DuckDB is not Snowflake).
+
+Validation for this pass is recorded in `docs/validation_record.md`. The GitHub Actions workflow is configured; it has
+not been observed running on a hosted runner. Nothing has been executed on Snowflake.
 
 ## What I did myself
 
 Chose the grains and denominators. Decided the two finance time axes. Wrote the assumptions table. Read every model once before sending. Ran `make build`, `make metrics`, `make lint` on the final commit.
 
-Total time on the deliverables: about three hours across two sessions, most of it reviewing and deciding rather than typing.
+Total time on the deliverables: about three hours across two sessions for passes 1 and 2, plus two shorter sessions for the Cursor read-through and the repair pass. Most of it reviewing and deciding rather than typing.

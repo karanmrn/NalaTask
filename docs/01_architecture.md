@@ -4,8 +4,7 @@ NALA Senior Analytics Engineer assessment. Karan Manoharan, September 2026.
 
 The project transforms three sources (payments backend and fincrime service via StreamServe CDC, Amplitude via Fivetran)
 into a governed layer for four production requirements and one exploratory funnel. It runs unchanged on DuckDB (local,
-synthetic data) and Snowflake (production). Everything described here has been executed locally: 37 models, 1 snapshot,
-158 data tests, 4 unit tests, semantic layer validated against the warehouse, five metrics queried.
+synthetic data) and Snowflake (production). Everything described here has been executed locally on DuckDB: 37 models, 1 snapshot, 158 data tests, 4 unit tests, two scripted regressions, semantic layer validated, five metrics queried. Snowflake was parsed, not executed.
 
 ![Architecture](architecture.svg)
 
@@ -16,7 +15,7 @@ synthetic data) and Snowflake (production). Everything described here has been e
 | Staging (`stg_`) | 16, one per source table | view | Rename, cast, collapse the CDC log. No business logic, so no storage. |
 | Intermediate (`int_`) | 4 | view | Reusable logic (type policy, workflow context, task candidates). Only consumed by marts. |
 | Snapshot | `snap_transaction_state` | snapshot (type 2) | Source keeps only the current row; this records state transitions. |
-| Marts, facts (`fct_`) | 5 | incremental merge (transactions, attempts, rule executions); table (reviews, tasks) | Large tables get merge with a 3-day `updated_at` lookback. Small ones rebuild. |
+| Marts, facts (`fct_`) | 5 | incremental merge (transactions, attempts, rule executions); table (reviews, tasks) | Transactions and attempts: 3-day `updated_at` lookback. Rule executions: `coalesce(_loaded_at, created_at)` lookback (immutable events, keyed on arrival). Small tables rebuild. |
 | Marts, aggregates (`agg_`) | 5 | table | Cheap to rebuild from facts; one row per day and dimension for Hex. |
 | Marts, dimensions (`dim_`) | 3 | table | Users, rule versions, providers. |
 | Exploratory | 3 | table for the 90-day event subset, views on top | Cost bound on the 100M-row source; nothing downstream depends on it. |
@@ -34,7 +33,8 @@ keep the row with the highest LSN per primary key, drop keys whose latest operat
 Consequences downstream:
 
 - Source tests check `not_null` only; uniqueness is asserted on staging, where it is true.
-- Incremental facts filter on `updated_at`, never `created_at`. An attempt created two months ago that changes state today falls inside the lookback and is merged.
+- Incremental facts filter on a change signal, never on creation alone. Transactions and disbursement attempts use a three-day `updated_at` lookback: an attempt created two months ago that changes state today is merged. Rule executions are immutable events, so they use `coalesce(_loaded_at, created_at)`: a historical execution replicated late is selected on its connector load time, and its reporting date stays the execution creation date. The `created_at` fallback applies only when the connector supplies no load timestamp and does not give the same late-arrival protection. `scripts/test_late_arrival.py` proves both the insert and the correction path and runs in CI.
+- Adding a watermark column to an existing incremental target: `on_schema_change: append_new_columns` adds it on the next run with nulls for old rows, so the first run after the change is a controlled `--full-refresh` of that model in a non-production schema, then production.
 - Hard deletes disappear from staging; the snapshot keeps their last known state.
 - `completed_at` on transactions comes from the snapshot's first `COMPLETED` transition, falling back to `updated_at` when the current state is `COMPLETED` (updated_at is the last state change by definition).
 - Freshness is measured on `_cdc_loaded_at` (warn 15 min, error 2 h) and `_fivetran_synced` (warn 26 h, error 30 h). Business timestamps are never used as freshness.
@@ -61,7 +61,7 @@ Scheduler: dbt Cloud jobs. The brief assumes dbt Cloud access, the sources are a
 | Job | Selector | Cadence | Trigger | Notes |
 |-----|----------|---------|---------|-------|
 | `ops_hourly` | `tag:ops tag:fincrime tag:tasks` + parents | hourly | schedule, skipped if the previous run is still going | incremental facts, 3-day lookback; snapshot first |
-| `finance_daily` | `tag:finance` + parents | daily 01:00 UTC | schedule, after the FX rate for the previous day has landed (`source freshness` gate on `reference_data`) | full rebuild of finance aggregates; reconciliation tests block publication |
+| `finance_daily` | `tag:finance` + parents | daily 01:00 UTC | schedule | full rebuild of finance aggregates; `finance_no_missing_fx` and `fx_unique_positive` fail the job when the previous day's rates are absent or malformed, so nothing publishes without coverage. A connector-level freshness gate on `reference_data` is a proposed production step, not configured here (the rate feed has no ingestion timestamp). |
 | `growth_daily` | `selector:exploratory` | daily | Fivetran sync-complete webhook, not a fixed 06:00 | 90-day window; failures warn only |
 | `full_refresh` | everything | on demand | manual | after a policy seed change or a backfill |
 
@@ -76,7 +76,7 @@ Cost controls: incremental merge on the three large facts, `cluster_by` date on 
 | Source | `not_null` on keys, freshness on connector timestamps, JSON parseability | `json_payloads_parse` |
 | Staging | `unique` + `not_null` on keys, `accepted_values` on every enum, `relationships` on foreign keys | 22 `accepted_values` tests on state and type enums |
 | Intermediate | grain uniqueness, no future or wrong-scope candidates | `no_future_workflow_candidate` |
-| Production marts | all of the above plus reconciliation to the fact (`finance_count_reconciliation`, `reviews_reconcile`, `fincrime_tasks_reconcile`), denominator bounds, latency band sums, FX coverage, no partial USD totals, unit tests on the denominator rules | 4 dbt unit tests, 23 singular tests |
+| Production marts | all of the above plus reconciliation to the fact (`finance_count_reconciliation`, `reviews_reconcile`, `fincrime_tasks_reconcile`), denominator bounds, latency band sums, FX coverage, no partial USD totals, unit tests on the denominator rules, scripted regressions that change the input between runs | 4 dbt unit tests, 23 singular tests, `scripts/test_late_arrival.py`, `scripts/test_missing_fx_metric.py` |
 | Exploratory | grain uniqueness, ordering, monotonic funnel, missing KYC signal; severity `warn` | `kyc_final_signal_missing` |
 
 A production mart ships when its grain test, its reconciliation test and its unit tests pass on Snowflake CI. An exploratory model ships when it builds and its grain test passes.
@@ -87,7 +87,13 @@ Seven semantic models, all on facts or dimensions, never on aggregates: `transac
 
 Time axes are per measure: `completed_transaction_volume` aggregates on `completed_date`, `transaction_success_rate` on `transaction_date`, reviews on `review_date`. `transactions` carries a `user` foreign entity so any metric slices by `sender_country` from `dim_users`.
 
+`completed_transaction_volume_usd` is a derived metric: `usd_sum / nullif(1 - sign(missing_fx_transactions), 0)`. SUM alone skips null USD amounts and publishes a partial total; the arithmetic guard returns null for the whole requested group, at any grain, when any contributing transaction lacks a rate. Local-currency volume stays known. Seven scenarios run through the real `mf query` path in `scripts/test_missing_fx_metric.py`.
+
 Saved queries `finance_volume_by_corridor` and `provider_success_daily` encode the safe groupings Hex should start from. Local-currency volume must always be grouped by `sent_currency` or corridor; MetricFlow cannot forbid a cross-currency sum, so the saved query and the docs do.
+
+## Known limits
+
+Snapshots record the states dbt observes at run time, not every lifecycle transition between runs. Staging drops CDC deletes, but a key already merged into an incremental fact stays there until a full refresh; delete propagation is the next improvement. A corrected historical FX rate or a policy seed change needs an explicit `--full-refresh` of `fct_transactions`; the lookback does not reprocess old rows. DuckDB execution plus `dbt parse --target prod` does not prove Snowflake runtime behaviour (contracts, MERGE, precision); that is the first job of the warehouse CI.
 
 ## Assumptions
 

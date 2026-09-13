@@ -78,5 +78,6 @@ select
         when usd_per_unit is null or usd_per_unit <= 0 then null
         else cast(completed_sent_amount * usd_per_unit as decimal(38, 8))
     end as completed_sent_amount_usd,
-    completed_qualifying_count = 1 and (usd_per_unit is null or usd_per_unit <= 0) as is_missing_fx
+    completed_qualifying_count = 1 and (usd_per_unit is null or usd_per_unit <= 0) as is_missing_fx,
+    case when completed_qualifying_count = 1 and (usd_per_unit is null or usd_per_unit <= 0) then 1 else 0 end as missing_fx_count
 from joined

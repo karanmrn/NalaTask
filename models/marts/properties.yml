@@ -90,6 +90,10 @@ models:
   - name: is_missing_fx
     description: Required USD conversion unavailable; fails Finance publication.
     data_type: boolean
+  - name: missing_fx_count
+    description: 1 when is_missing_fx, else 0. Additive counter so the semantic layer can null a USD total that would
+      otherwise be partial.
+    data_type: decimal(38,0)
 - name: agg_transactions_daily
   description: One row per UTC creation day, corridor, sending currency and type. Cohort counts and success rate.
     Recent cohorts restate as transactions settle.

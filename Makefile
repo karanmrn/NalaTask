@@ -15,6 +15,10 @@ build: seed       ## full build: snapshot, models, tests, unit tests
 test:             ## tests only
 	uv run dbt test
 
+regress:          ## scripted regressions: late-arrival incremental merge, missing-FX semantic guard
+	uv run python scripts/test_late_arrival.py
+	uv run python scripts/test_missing_fx_metric.py
+
 lint:             ## sqlfluff over models and tests
 	uv run sqlfluff lint models tests analyses
 

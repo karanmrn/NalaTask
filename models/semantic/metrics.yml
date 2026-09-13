@@ -41,9 +41,15 @@ semantic_models:
     expr: completed_sent_amount
     agg_time_dimension: completed_date
   - name: completed_transaction_volume_usd_measure
-    description: Completed sent amount converted with the approved daily USD rate, on completion date.
+    description: Sum of nullable per-transaction USD amounts, on completion date. Helper only; SUM skips nulls, so
+      this is partial when a rate is missing. Consumers use completed_transaction_volume_usd.
     agg: sum
     expr: completed_sent_amount_usd
+    agg_time_dimension: completed_date
+  - name: missing_fx_count_measure
+    description: Count of completed qualifying transactions without a valid USD rate, on completion date.
+    agg: sum
+    expr: missing_fx_count
     agg_time_dimension: completed_date
   - name: qualified_transactions_measure
     description: qualifying_count
@@ -257,13 +263,29 @@ metrics:
   type: simple
   type_params:
     measure: completed_transaction_volume_measure
-- name: completed_transaction_volume_usd
-  label: Completed Transaction Volume (USD)
-  description: Completed qualifying sent amount converted to USD with the approved daily rate. Null when a
-    rate is missing rather than a partial sum.
+- name: completed_transaction_volume_usd_sum
+  label: Completed Transaction Volume USD (unguarded sum)
+  description: 'Helper: SUM of per-transaction USD amounts. Partial when any rate is missing. Not for consumers.'
   type: simple
   type_params:
     measure: completed_transaction_volume_usd_measure
+- name: missing_fx_transactions
+  label: Missing FX Transactions
+  description: 'Helper: completed qualifying transactions with no valid USD rate in the requested group.'
+  type: simple
+  type_params:
+    measure: missing_fx_count_measure
+- name: completed_transaction_volume_usd
+  label: Completed Transaction Volume (USD)
+  description: Completed qualifying sent amount in USD at the requested grouping. Null for the whole group when any
+    contributing transaction lacks an approved rate; never a partial sum. Arithmetic guard so it holds at any grain,
+    including multi-day totals.
+  type: derived
+  type_params:
+    expr: completed_transaction_volume_usd_sum / nullif(1 - sign(missing_fx_transactions), 0)
+    metrics:
+    - name: completed_transaction_volume_usd_sum
+    - name: missing_fx_transactions
 - name: completed_qualifying_transactions
   label: Completed Qualifying Transactions
   description: 'Helper numerator: completed five-type outbound transactions.'
@@ -337,6 +359,7 @@ saved_queries:
   query_params:
     metrics:
     - completed_transaction_volume
+    - completed_transaction_volume_usd
     - transaction_success_rate
     group_by:
     - TimeDimension('metric_time', 'day')
