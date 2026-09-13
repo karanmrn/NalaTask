@@ -14,7 +14,7 @@ dbt-metricflow 0.14.0. Local DuckDB only. No Snowflake credentials; nothing exec
 | Missing-FX regression | `uv run python scripts/test_missing_fx_metric.py` | 7 PASS through `mf query`: all valid 260; one missing null (local 150); all missing null; two groups only incomplete null; combined null; excluded row ignored; filter restores 130 |
 | Lint | `uv run sqlfluff lint models tests analyses` | clean |
 | Snowflake-target parse | `uv run dbt parse --target prod --no-partial-parse` | 0 errors, 0 deprecations |
-| Fresh clone | `git clone` into empty dir, `uv sync`, `make build`, `make regress`, `make metrics` | see final row after packaging |
+| Final zip from scratch | unzip `NalaTask_submission_final.zip` into an empty dir, `uv sync`, `make build`, `make regress`, `make metrics` | build `PASS=201 ERROR=0`; regress 13 PASS; mf 6 stages `ERRORS: 0`; `unzip -t` no errors; 175 files, no `.git`, `.venv`, `.duckdb`, `target/` |
 | GitHub Actions | `.github/workflows/ci.yml` | configured; not observed running on a hosted runner |
 | PDF | `docs/01_architecture.pdf` rendered with xhtml2pdf, read back | 3 pages, tables intact, no clipping |
 
