@@ -1,7 +1,7 @@
 version: 2
 sources:
   - name: payments
-    description: Source 1 from the assessment. Current-row PostgreSQL replica via StreamServe; connector metadata contract is not supplied.
+    description: Source 1, payments backend. PostgreSQL replicated by StreamServe CDC as an append-only change log; staging collapses it to one current row per key.
     database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
     schema: '{{ var(''payments_raw_schema'', ''PAYMENTS'') }}'
     config:
@@ -475,7 +475,7 @@ sources:
             description: Timestamp the change row landed in Snowflake. Freshness anchor. Assumed connector metadata.
             data_type: timestamp
   - name: fincrime
-    description: Source 2 from the assessment. Current-row PostgreSQL replica via StreamServe; connector metadata contract is not supplied.
+    description: Source 2, fincrime service. PostgreSQL replicated by StreamServe CDC as an append-only change log; staging collapses it to one current row per key.
     database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
     schema: '{{ var(''fincrime_raw_schema'', ''FINCRIME'') }}'
     config:
@@ -770,7 +770,7 @@ sources:
             description: Fivetran sync timestamp. Standard Fivetran metadata column; freshness anchor.
             data_type: timestamp
   - name: reference_data
-    description: 'REQUIRED ADDITIONAL INPUT, not provided in the brief: Finance-approved daily USD conversion rates.'
+    description: Finance-approved daily USD conversion rates. Not one of the three supplied sources; a declared dependency for requirement 1.
     database: "{{ 'nala' if target.type == 'duckdb' else var('raw_database', 'RAW') }}"
     schema: '{{ var(''reference_raw_schema'', ''REFERENCE'') }}'
     config:

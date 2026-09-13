@@ -297,6 +297,9 @@ models:
   - name: created_at
     description: Rule execution creation.
     data_type: timestamp_ntz
+  - name: _loaded_at
+    description: Connector load time. Incremental watermark for this immutable event table.
+    data_type: timestamp_ntz
   - name: execution_date
     description: Creation day.
     data_type: date

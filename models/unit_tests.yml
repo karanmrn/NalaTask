@@ -133,8 +133,11 @@ unit_tests:
       avg_completion_seconds: 30
       under_1_min: 1
 - name: rule_execution_incremental_uses_cdc_load_time
-  description: A recently loaded update is processed even when the rule execution was created outside the lookback.
+  description: Incremental branch keys on connector load time. A row created outside the lookback but loaded today is processed.
   model: fct_rule_executions
+  overrides:
+    macros:
+      is_incremental: true
   given:
   - input: ref('stg_fincrime__rule_executions')
     rows:
